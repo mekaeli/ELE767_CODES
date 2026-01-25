@@ -1,0 +1,14 @@
+{
+  "mode": "Apprentissage",
+  "activation": "sigmoïde",
+  "nx": "5",
+  "nsc1": "15",
+  "nsc2": "15",
+  "ncs": "10",
+  "others": "",
+  "nc": "4",
+  "b_margin": "",
+  "w_margin": "",
+  "todo1": "",
+  "todo2": ""
+}
