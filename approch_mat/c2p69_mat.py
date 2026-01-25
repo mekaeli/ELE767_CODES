@@ -1,12 +1,12 @@
 """Exercice c2p69 — Réseau 2→2→3.
 
-Ce script suit la même présentation que c2p59:
-- choix de la fonction d'activation via `n_fct`
+Ce script montre toutes les étapes du calcul:
+- choix de la fonction d'activation avec n_fct
 - affichage pédagogique (Entrées / Sorties)
-- calculs détaillés: propagation avant + backprop (deltas, corrections, mises à jour)
+- propagation avant + rétropropagation (deltas, corrections, mises à jour)
 
 Note:
-Les valeurs (poids/biais/cibles) proviennent du schéma fourni.
+	Les valeurs (poids/biais/cibles) proviennent du schéma fourni.
 """
 
 # Configuration du chemin pour importer les modules du dossier parent
@@ -17,53 +17,61 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import des fonctions nécessaires
 from generic_func import clear_console
-from neurone.backpp_neurone import Neurone
+from neurone.backpp_neurone_alg import Neurone
 
 
 _IND = "\t"
 
 
+# ==================== choisir_fonction_activation =========================
 def choisir_fonction_activation(n_fct: int):
-	"""Choisit la fonction d'activation selon `n_fct`.
+	"""Choisit la fonction d'activation selon n_fct.
 
-	Règle:
+	Règle (ordre officiel):
 		- n_fct = 1 : sigmoïde
-		- n_fct = 2 : tanh
-		- n_fct = 3 : GELU
-		- n_fct = 4 : tan
+		- n_fct = 2 : tan
+		- n_fct = 3 : tanh
+		- n_fct = 4 : GELU
 
 	Retour:
 		(nom_affiche, fonction_activation)
 
 	Note:
-		La fonction retournée doit accepter une valeur `i` et retourner (Fi, Fp).
+		La fonction retournée prend une entrée i et retourne (Fi, Fp):
+		- Fi : valeur activée
+		- Fp : dérivée de la fonction au point i
 	"""
 
 	if n_fct == 1:
-		from fct_dactivation.sigmoide import sigmoide_et_derivative
+		from neurone.fct_dactivation import sigmoide_et_derivative
 
 		return "sigmoïde", sigmoide_et_derivative
 
 	if n_fct == 2:
-		from fct_dactivation.tanh import tanh_et_derivative
-
-		return "tanh", tanh_et_derivative
-
-	if n_fct == 3:
-		from fct_dactivation.gelu import gelu_et_derivative
-
-		return "gelu", gelu_et_derivative
-
-	if n_fct == 4:
-		from fct_dactivation.tan import tan_et_derivative
+		from neurone.fct_dactivation import tan_et_derivative
 
 		return "tan", tan_et_derivative
 
-	raise ValueError("n_fct doit être 1 (sigmoïde), 2 (tanh), 3 (gelu) ou 4 (tan)")
+	if n_fct == 3:
+		from neurone.fct_dactivation import tanh_et_derivative
+
+		return "tanh", tanh_et_derivative
+
+	if n_fct == 4:
+		from neurone.fct_dactivation import gelu_et_derivative
+
+		return "gelu", gelu_et_derivative
+
+	raise ValueError("n_fct doit être 1 (sigmoïde), 2 (tan), 3 (tanh) ou 4 (gelu)")
 
 
+# ==================== _print_entrees =========================
 def _print_entrees(lines):
-	"""Affiche un bloc 'Entrées' avec une indentation constante."""
+	"""Affiche un bloc 'Entrées' avec une indentation constante.
+
+	But:
+		Rendre l'affichage plus lisible et identique partout.
+	"""
 
 	print(f"{_IND}Entrées")
 	for line in lines:
@@ -71,8 +79,13 @@ def _print_entrees(lines):
 	print()
 
 
+# ==================== _print_sorties =========================
 def _print_sorties(lines):
-	"""Affiche un bloc 'Sorties' avec une indentation constante."""
+	"""Affiche un bloc 'Sorties' avec une indentation constante.
+
+	But:
+		Rendre l'affichage plus lisible et identique partout.
+	"""
 
 	print(f"{_IND}Sorties")
 	for line in lines:
@@ -80,18 +93,17 @@ def _print_sorties(lines):
 	print()
 
 
+# ==================== resolution_reseau_exemple =========================
 def resolution_reseau_exemple(n_fct: int):
 	"""Résout le réseau du schéma (2 entrées → 2 cachés → 3 sorties).
 
-	Ce que le script fait:
-	- calcule i, Fi, Fp pour chaque neurone
-	- calcule les deltas des 3 sorties
-	- calcule les corrections et les mises à jour des poids/biais
-	- rétro-propage l'erreur vers les 2 neurones cachés
+	Ce que la fonction fait:
+		- Initialise les poids et les biais comme sur le schéma
+		- Calcule la propagation avant (i, Fi, Fp)
+		- Calcule la rétropropagation (deltas, corrections, mises à jour)
 
-	Important:
-	- On ne change aucune fonction existante (BackPP, activations, Neurone).
-	- On utilise `n_fct` pour choisir la fonction d'activation.
+	Paramètre:
+		n_fct (int): choix de la fonction d'activation (voir choisir_fonction_activation).
 	"""
 
 	nom_fct, fct_activation = choisir_fonction_activation(n_fct)
@@ -319,18 +331,19 @@ def resolution_reseau_exemple(n_fct: int):
 	)
 
 
+# ==================== main =========================
 def main():
 	"""Point d'entrée du script.
 
-	Change `n_fct` pour sélectionner la fonction d'activation.
-	Au démarrage, le choix est affiché.
+	Tu peux changer n_fct pour sélectionner la fonction d'activation.
+	Au démarrage, le choix courant est affiché.
 	"""
 
 	# Choix de la fonction d'activation
 	# n_fct = 1 : sigmoïde
-	# n_fct = 2 : tanh
-	# n_fct = 3 : gelu
-	# n_fct = 4 : tan
+	# n_fct = 2 : tan
+	# n_fct = 3 : tanh
+	# n_fct = 4 : gelu
 	n_fct = 1
 
 	clear_console()
