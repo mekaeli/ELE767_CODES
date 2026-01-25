@@ -7,10 +7,10 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import des fonctions d'activation
-from fonc_activation.sigmoide import sigmoide_et_derivative
-from fonc_activation.tanh import tanh_et_derivative
-from fonc_activation.gelu import gelu_et_derivative
-from fonc_activation.tan import tan_et_derivative
+from fct_dactivation.sigmoide import sigmoide_et_derivative
+from fct_dactivation.tanh import tanh_et_derivative
+from fct_dactivation.gelu import gelu_et_derivative
+from fct_dactivation.tan import tan_et_derivative
 
 
 class Neurone:

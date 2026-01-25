@@ -40,22 +40,22 @@ def choisir_fonction_activation(n_fct: int):
 	"""
 
 	if n_fct == 1:
-		from fonc_activation.sigmoide import sigmoide_et_derivative
+		from fct_dactivation.sigmoide import sigmoide_et_derivative
 
 		return "sigmoïde", sigmoide_et_derivative
 
 	if n_fct == 2:
-		from fonc_activation.tanh import tanh_et_derivative
+		from fct_dactivation.tanh import tanh_et_derivative
 
 		return "tanh", tanh_et_derivative
 
 	if n_fct == 3:
-		from fonc_activation.gelu import gelu_et_derivative
+		from fct_dactivation.gelu import gelu_et_derivative
 
 		return "gelu", gelu_et_derivative
 
 	if n_fct == 4:
-		from fonc_activation.tan import tan_et_derivative
+		from fct_dactivation.tan import tan_et_derivative
 
 		return "tan", tan_et_derivative
 
