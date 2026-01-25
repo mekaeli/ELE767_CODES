@@ -7,8 +7,6 @@ Ce fichier contient des petites fonctions réutilisées dans plusieurs scripts.
 import os
 import math
 
-# import modules locales
-
 
 # ==================== clear_console =========================
 def clear_console():
@@ -22,10 +20,9 @@ def clear_console():
         - Linux/Mac : commande `clear`
     """
 
+    # Nettoyer la console (Windows et Unix)
     os.system("cls" if os.name == "nt" else "clear")
-    print("")
     print("Console nettoyée.")
-    print("")
 
 
 

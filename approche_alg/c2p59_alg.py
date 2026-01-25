@@ -163,6 +163,36 @@ def resolution_reseau_exemple(n_fct: int):
     new_w22_1 = Neurone.maj(w22_1, corr_w22_1)
     new_b_h2 = Neurone.maj(b_h2, corr_b_h2)
 
+    results = {
+        "X": [x1, x2],
+        "W1": [[w11_1, w12_1], [w21_1, w22_1]],
+        "b1": [b_h1, b_h2],
+        "W2": [[w11_2], [w21_2]],
+        "b2": [b_s],
+        "d": [d],
+        "eta": eta,
+        # forward
+        "z1": [i_h1, i_h2],
+        "a1": [Fi_h1, Fi_h2],
+        "fp1": [Fp_h1, Fp_h2],
+        "z2": [i_s],
+        "a2": [Fi_s],
+        "fp2": [Fp_s],
+        # deltas
+        "delta2": [delta_s],
+        "delta1": [delta_h1, delta_h2],
+        # correcteurs
+        "dW2": [[corr_w11_2], [corr_w21_2]],
+        "db2": [corr_b_s],
+        "dW1": [[corr_w11_1, corr_w12_1], [corr_w21_1, corr_w22_1]],
+        "db1": [corr_b_h1, corr_b_h2],
+        # mise à jour
+        "new_W2": [[new_w11_2], [new_w21_2]],
+        "new_b2": [new_b_s],
+        "new_W1": [[new_w11_1, new_w12_1], [new_w21_1, new_w22_1]],
+        "new_b1": [new_b_h1, new_b_h2],
+    }
+
     # -------------------- Affichage par phases --------------------
     print("=== ACTIVATIONS ===")
     print("h1")
@@ -222,6 +252,8 @@ def resolution_reseau_exemple(n_fct: int):
     _print_sorties([f"w11_1 -> {new_w11_1}", f"w21_1 -> {new_w21_1}", f"b_h1  -> {new_b_h1}"])
     _print_entrees([f"w12_1 = {w12_1}, delta_w12_1 = {corr_w12_1}", f"w22_1 = {w22_1}, delta_w22_1 = {corr_w22_1}", f"b_h2  = {b_h2}, delta_b_h2  = {corr_b_h2}"])
     _print_sorties([f"w12_1 -> {new_w12_1}", f"w22_1 -> {new_w22_1}", f"b_h2  -> {new_b_h2}"])
+
+    return results
 
 # ==================== main =========================
 def main():

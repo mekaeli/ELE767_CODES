@@ -1,12 +1,9 @@
-"""Exercice c2p69 — Réseau 2→2→3.
+"""Exercice c2p69 — Réseau 2→2→3 (approche matricielle).
 
-Ce script montre toutes les étapes du calcul:
-- choix de la fonction d'activation avec n_fct
-- affichage pédagogique (Entrées / Sorties)
-- propagation avant + rétropropagation (deltas, corrections, mises à jour)
-
-Note:
-	Les valeurs (poids/biais/cibles) proviennent du schéma fourni.
+Objectif:
+	- Propagation avant + rétropropagation en utilisant NeuroneMat
+	- Affichage regroupé par phases (activations, Fi/Fp, deltas, corrections, mises à jour)
+	- Matrices affichées correctement (lignes/colonnes)
 """
 
 # Configuration du chemin pour importer les modules du dossier parent
@@ -17,10 +14,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import des fonctions nécessaires
 from generic_func import clear_console
-from neurone.backpp_neurone_alg import Neurone
+from approch_mat.format_mat import matrix_lines, shape_str, vector_lines
+from neurone.backpp_neurone_mat import NeuroneMat
 
 
 _IND = "\t"
+
+
+def _nom_fct(n_fct: int) -> str:
+	return {1: "sigmoïde", 2: "tan", 3: "tanh", 4: "gelu"}.get(n_fct, f"n_fct={n_fct}")
 
 
 # ==================== choisir_fonction_activation =========================
@@ -106,7 +108,7 @@ def resolution_reseau_exemple(n_fct: int):
 		n_fct (int): choix de la fonction d'activation (voir choisir_fonction_activation).
 	"""
 
-	nom_fct, fct_activation = choisir_fonction_activation(n_fct)
+	nom_fct = _nom_fct(n_fct)
 
 	# 1) Paramètres (du schéma)
 	# entrees (à ajuster si ton énoncé donne d'autres valeurs)
@@ -138,197 +140,118 @@ def resolution_reseau_exemple(n_fct: int):
 	# taux d'apprentissage
 	eta = 0.1
 
-	# Outil pour calculer i = somme(x*w) + b
-	neurone = Neurone()
+	# ==================== Paramètres matriciels ====================
+	W1 = [[w11_1, w12_1], [w21_1, w22_1]]
+	b1 = [b_h1, b_h2]
 
-	# 2) Propagation avant — couche cachée
-	print("=== COUCHE CACHEE (h1) ===")
-	print("Activation")
-	_print_entrees([f"x1 = {x1}, w11_1 = {w11_1}", f"x2 = {x2}, w21_1 = {w21_1}", f"b_h1 = {b_h1}"])
-	i_h1 = neurone.calcul_activation_i([(x1, w11_1), (x2, w21_1)], b_h1)
-	_print_sorties([f"i_h1 = {i_h1}"])
+	W2 = [
+		[w11_2, w12_2, w13_2],
+		[w21_2, w22_2, w23_2],
+	]
+	b2 = [b_o1, b_o2, b_o3]
 
-	print(f"Fonction d'activation et dérivée ({nom_fct})")
-	_print_entrees([f"i_h1 = {i_h1}"])
-	Fi_h1, Fp_h1 = fct_activation(i_h1)
-	_print_sorties([f"Fi_h1 = {Fi_h1}", f"Fp_h1 = {Fp_h1}"])
+	d_list = [d1, d2, d3]
+	w_list = [W1, W2]
+	b_list = [b1, b2]
 
-	print("\n=== COUCHE CACHEE (h2) ===")
-	print("Activation")
-	_print_entrees([f"x1 = {x1}, w12_1 = {w12_1}", f"x2 = {x2}, w22_1 = {w22_1}", f"b_h2 = {b_h2}"])
-	i_h2 = neurone.calcul_activation_i([(x1, w12_1), (x2, w22_1)], b_h2)
-	_print_sorties([f"i_h2 = {i_h2}"])
+	nn = NeuroneMat()
 
-	print(f"Fonction d'activation et dérivée ({nom_fct})")
-	_print_entrees([f"i_h2 = {i_h2}"])
-	Fi_h2, Fp_h2 = fct_activation(i_h2)
-	_print_sorties([f"Fi_h2 = {Fi_h2}", f"Fp_h2 = {Fp_h2}"])
+	# ==================== CALCULS (matriciel uniquement) ====================
+	y, cache = nn.forward(X, w_list, b_list, n_fct)
+	z1, z2 = cache.z_list
+	a1, a2 = cache.a_list
+	fp1, fp2 = cache.fp_list
 
-	# 3) Propagation avant — couche sortie (3 neurones)
-	print("\n=== COUCHE SORTIE (o1) ===")
-	print("Activation")
-	_print_entrees([f"Fi_h1 = {Fi_h1}, w11_2 = {w11_2}", f"Fi_h2 = {Fi_h2}, w21_2 = {w21_2}", f"b_o1 = {b_o1}"])
-	i_o1 = neurone.calcul_activation_i([(Fi_h1, w11_2), (Fi_h2, w21_2)], b_o1)
-	_print_sorties([f"i_o1 = {i_o1}"])
+	delta2 = nn.Delta(d_list, y, fp2)
+	delta1 = nn.Delta_cache(delta2, W2, fp1)
 
-	print(f"Fonction d'activation et dérivée ({nom_fct})")
-	_print_entrees([f"i_o1 = {i_o1}"])
-	Fi_o1, Fp_o1 = fct_activation(i_o1)
-	_print_sorties([f"Fi_o1 = {Fi_o1}", f"Fp_o1 = {Fp_o1}"])
+	dW2, db2 = nn.Correcteur(eta, a1, delta2)
+	dW1, db1 = nn.Correcteur(eta, X, delta1)
 
-	print("\n=== COUCHE SORTIE (o2) ===")
-	print("Activation")
-	_print_entrees([f"Fi_h1 = {Fi_h1}, w12_2 = {w12_2}", f"Fi_h2 = {Fi_h2}, w22_2 = {w22_2}", f"b_o2 = {b_o2}"])
-	i_o2 = neurone.calcul_activation_i([(Fi_h1, w12_2), (Fi_h2, w22_2)], b_o2)
-	_print_sorties([f"i_o2 = {i_o2}"])
+	new_W1, new_b1 = nn.maj(W1, dW1, b1, db1)
+	new_W2, new_b2 = nn.maj(W2, dW2, b2, db2)
 
-	print(f"Fonction d'activation et dérivée ({nom_fct})")
-	_print_entrees([f"i_o2 = {i_o2}"])
-	Fi_o2, Fp_o2 = fct_activation(i_o2)
-	_print_sorties([f"Fi_o2 = {Fi_o2}", f"Fp_o2 = {Fp_o2}"])
+	results = {
+		"X": X,
+		"W1": W1,
+		"b1": b1,
+		"W2": W2,
+		"b2": b2,
+		"d": d_list,
+		"eta": eta,
+		# forward
+		"z1": z1,
+		"a1": a1,
+		"fp1": fp1,
+		"z2": z2,
+		"a2": a2,
+		"fp2": fp2,
+		# deltas
+		"delta2": delta2,
+		"delta1": delta1,
+		# correcteurs
+		"dW2": dW2,
+		"db2": db2,
+		"dW1": dW1,
+		"db1": db1,
+		# mise à jour
+		"new_W1": new_W1,
+		"new_b1": new_b1,
+		"new_W2": new_W2,
+		"new_b2": new_b2,
+	}
 
-	print("\n=== COUCHE SORTIE (o3) ===")
-	print("Activation")
-	_print_entrees([f"Fi_h1 = {Fi_h1}, w13_2 = {w13_2}", f"Fi_h2 = {Fi_h2}, w23_2 = {w23_2}", f"b_o3 = {b_o3}"])
-	i_o3 = neurone.calcul_activation_i([(Fi_h1, w13_2), (Fi_h2, w23_2)], b_o3)
-	_print_sorties([f"i_o3 = {i_o3}"])
+	# ==================== AFFICHAGE (phases) ====================
+	print("=== ACTIVATIONS ===")
+	_print_entrees([f"X {shape_str(X)} (colonne)"] + vector_lines(X, as_column=True))
 
-	print(f"Fonction d'activation et dérivée ({nom_fct})")
-	_print_entrees([f"i_o3 = {i_o3}"])
-	Fi_o3, Fp_o3 = fct_activation(i_o3)
-	_print_sorties([f"Fi_o3 = {Fi_o3}", f"Fp_o3 = {Fp_o3}"])
+	_print_entrees([f"W1 {shape_str(W1)}", f"b1 {shape_str(b1)} (colonne)"] + matrix_lines(W1) + ["b1="] + vector_lines(b1, as_column=True))
+	_print_sorties([f"z1 = X@W1 + b1 {shape_str(z1)} (colonne)"] + vector_lines(z1, as_column=True))
 
-	# 4) Deltas — couche sortie
-	print("\n=== DELTAS SORTIE ===")
+	_print_entrees([f"W2 {shape_str(W2)}", f"b2 {shape_str(b2)} (colonne)"] + matrix_lines(W2) + ["b2="] + vector_lines(b2, as_column=True))
+	_print_sorties([f"z2 = a1@W2 + b2 {shape_str(z2)} (colonne)"] + vector_lines(z2, as_column=True))
 
-	print("Signal d'erreur (o1)")
-	_print_entrees([f"d1 = {d1}", f"Fi_o1 = {Fi_o1}", f"Fp_o1 = {Fp_o1}"])
-	delta_o1 = Neurone.Delta(d1, Fi_o1, Fp_o1)
-	_print_sorties([f"delta_o1 = {delta_o1}"])
+	print(f"=== FONCTIONS D'ACTIVATION + DERIVEES ({nom_fct}) ===")
+	_print_sorties([f"a1 = Fi(z1) {shape_str(a1)} (colonne)"] + vector_lines(a1, as_column=True))
+	_print_sorties([f"fp1 = Fp(z1) {shape_str(fp1)} (colonne)"] + vector_lines(fp1, as_column=True))
+	_print_sorties([f"a2 = Fi(z2) {shape_str(a2)} (colonne)"] + vector_lines(a2, as_column=True))
+	_print_sorties([f"fp2 = Fp(z2) {shape_str(fp2)} (colonne)"] + vector_lines(fp2, as_column=True))
 
-	print("Signal d'erreur (o2)")
-	_print_entrees([f"d2 = {d2}", f"Fi_o2 = {Fi_o2}", f"Fp_o2 = {Fp_o2}"])
-	delta_o2 = Neurone.Delta(d2, Fi_o2, Fp_o2)
-	_print_sorties([f"delta_o2 = {delta_o2}"])
+	print("=== SIGNAUX D'ERREUR ===")
+	_print_entrees([f"d {shape_str(d_list)} (colonne)"] + vector_lines(d_list, as_column=True))
+	_print_sorties([f"delta2 (sortie) {shape_str(delta2)} (colonne)"] + vector_lines(delta2, as_column=True))
+	_print_sorties([f"delta1 (cachée) {shape_str(delta1)} (colonne)"] + vector_lines(delta1, as_column=True))
 
-	print("Signal d'erreur (o3)")
-	_print_entrees([f"d3 = {d3}", f"Fi_o3 = {Fi_o3}", f"Fp_o3 = {Fp_o3}"])
-	delta_o3 = Neurone.Delta(d3, Fi_o3, Fp_o3)
-	_print_sorties([f"delta_o3 = {delta_o3}"])
+	print("=== FACTEURS DE CORRECTION ===")
+	_print_entrees([f"eta = {eta}"])
+	_print_sorties([f"dW2 {shape_str(dW2)}"] + matrix_lines(dW2))
+	_print_sorties([f"db2 {shape_str(db2)} (colonne)"] + vector_lines(db2, as_column=True))
+	_print_sorties([f"dW1 {shape_str(dW1)}"] + matrix_lines(dW1))
+	_print_sorties([f"db1 {shape_str(db1)} (colonne)"] + vector_lines(db1, as_column=True))
 
-	# 5) Corrections + mises à jour — poids couche 2 (cachée -> sorties)
-	print("\n=== CORRECTIONS + MISES A JOUR (couche 2) ===")
-	print("Facteur de correction (o1)")
-	_print_entrees([f"eta = {eta}", f"x = Fi_h1 = {Fi_h1}, delta = {delta_o1}", f"x = Fi_h2 = {Fi_h2}, delta = {delta_o1}", f"x = 1 (biais), delta = {delta_o1}"])
-	corr_w11_2 = Neurone.Correcteur(eta, Fi_h1, delta_o1)
-	corr_w21_2 = Neurone.Correcteur(eta, Fi_h2, delta_o1)
-	corr_b_o1 = Neurone.Correcteur(eta, 1, delta_o1)
-	_print_sorties([f"delta_w11_2 = {corr_w11_2}", f"delta_w21_2 = {corr_w21_2}", f"delta_b_o1  = {corr_b_o1}"])
+	print("=== MISES A JOUR ===")
+	_print_sorties([f"W2 <- W2 + dW2"] + matrix_lines(new_W2, precision=12))
+	_print_sorties([f"b2 <- b2 + db2 (colonne)"] + vector_lines(new_b2, as_column=True, precision=12))
+	_print_sorties([f"W1 <- W1 + dW1"] + matrix_lines(new_W1, precision=12))
+	_print_sorties([f"b1 <- b1 + db1 (colonne)"] + vector_lines(new_b1, as_column=True, precision=12))
 
-	print("Mise à jour (o1)")
-	_print_entrees([f"w11_2 = {w11_2}, delta_w11_2 = {corr_w11_2}", f"w21_2 = {w21_2}, delta_w21_2 = {corr_w21_2}", f"b_o1  = {b_o1}, delta_b_o1  = {corr_b_o1}"])
-	new_w11_2 = Neurone.maj(w11_2, corr_w11_2)
-	new_w21_2 = Neurone.maj(w21_2, corr_w21_2)
-	new_b_o1 = Neurone.maj(b_o1, corr_b_o1)
-	_print_sorties([f"w11_2 -> {new_w11_2}", f"w21_2 -> {new_w21_2}", f"b_o1  -> {new_b_o1}"])
-
-	print("Facteur de correction (o2)")
-	_print_entrees([f"eta = {eta}", f"x = Fi_h1 = {Fi_h1}, delta = {delta_o2}", f"x = Fi_h2 = {Fi_h2}, delta = {delta_o2}", f"x = 1 (biais), delta = {delta_o2}"])
-	corr_w12_2 = Neurone.Correcteur(eta, Fi_h1, delta_o2)
-	corr_w22_2 = Neurone.Correcteur(eta, Fi_h2, delta_o2)
-	corr_b_o2 = Neurone.Correcteur(eta, 1, delta_o2)
-	_print_sorties([f"delta_w12_2 = {corr_w12_2}", f"delta_w22_2 = {corr_w22_2}", f"delta_b_o2  = {corr_b_o2}"])
-
-	print("Mise à jour (o2)")
-	_print_entrees([f"w12_2 = {w12_2}, delta_w12_2 = {corr_w12_2}", f"w22_2 = {w22_2}, delta_w22_2 = {corr_w22_2}", f"b_o2  = {b_o2}, delta_b_o2  = {corr_b_o2}"])
-	new_w12_2 = Neurone.maj(w12_2, corr_w12_2)
-	new_w22_2 = Neurone.maj(w22_2, corr_w22_2)
-	new_b_o2 = Neurone.maj(b_o2, corr_b_o2)
-	_print_sorties([f"w12_2 -> {new_w12_2}", f"w22_2 -> {new_w22_2}", f"b_o2  -> {new_b_o2}"])
-
-	print("Facteur de correction (o3)")
-	_print_entrees([f"eta = {eta}", f"x = Fi_h1 = {Fi_h1}, delta = {delta_o3}", f"x = Fi_h2 = {Fi_h2}, delta = {delta_o3}", f"x = 1 (biais), delta = {delta_o3}"])
-	corr_w13_2 = Neurone.Correcteur(eta, Fi_h1, delta_o3)
-	corr_w23_2 = Neurone.Correcteur(eta, Fi_h2, delta_o3)
-	corr_b_o3 = Neurone.Correcteur(eta, 1, delta_o3)
-	_print_sorties([f"delta_w13_2 = {corr_w13_2}", f"delta_w23_2 = {corr_w23_2}", f"delta_b_o3  = {corr_b_o3}"])
-
-	print("Mise à jour (o3)")
-	_print_entrees([f"w13_2 = {w13_2}, delta_w13_2 = {corr_w13_2}", f"w23_2 = {w23_2}, delta_w23_2 = {corr_w23_2}", f"b_o3  = {b_o3}, delta_b_o3  = {corr_b_o3}"])
-	new_w13_2 = Neurone.maj(w13_2, corr_w13_2)
-	new_w23_2 = Neurone.maj(w23_2, corr_w23_2)
-	new_b_o3 = Neurone.maj(b_o3, corr_b_o3)
-	_print_sorties([f"w13_2 -> {new_w13_2}", f"w23_2 -> {new_w23_2}", f"b_o3  -> {new_b_o3}"])
-
-	# 6) Deltas — couche cachée
-	print("\n=== DELTAS CACHEE ===")
-
-	print("Signal d'erreur (h1)")
-	_print_entrees(
-		[
-			f"delta_o1 = {delta_o1}, w11_2 = {w11_2}",
-			f"delta_o2 = {delta_o2}, w12_2 = {w12_2}",
-			f"delta_o3 = {delta_o3}, w13_2 = {w13_2}",
-			f"Fp_h1 = {Fp_h1}",
-		]
-	)
-	delta_h1 = Neurone.Delta_cache([(delta_o1, w11_2), (delta_o2, w12_2), (delta_o3, w13_2)], Fp_h1)
-	_print_sorties([f"delta_h1 = {delta_h1}"])
-
-	print("Signal d'erreur (h2)")
-	_print_entrees(
-		[
-			f"delta_o1 = {delta_o1}, w21_2 = {w21_2}",
-			f"delta_o2 = {delta_o2}, w22_2 = {w22_2}",
-			f"delta_o3 = {delta_o3}, w23_2 = {w23_2}",
-			f"Fp_h2 = {Fp_h2}",
-		]
-	)
-	delta_h2 = Neurone.Delta_cache([(delta_o1, w21_2), (delta_o2, w22_2), (delta_o3, w23_2)], Fp_h2)
-	_print_sorties([f"delta_h2 = {delta_h2}"])
-
-	# 7) Corrections + mises à jour — couche 1 (entrées -> cachés)
-	print("\n=== CORRECTIONS + MISES A JOUR (couche 1) ===")
-
-	print("Facteur de correction (h1)")
-	_print_entrees([f"eta = {eta}", f"x1 = {x1}, delta = {delta_h1}", f"x2 = {x2}, delta = {delta_h1}", f"x = 1 (biais), delta = {delta_h1}"])
-	corr_w11_1 = Neurone.Correcteur(eta, x1, delta_h1)
-	corr_w21_1 = Neurone.Correcteur(eta, x2, delta_h1)
-	corr_b_h1 = Neurone.Correcteur(eta, 1, delta_h1)
-	_print_sorties([f"delta_w11_1 = {corr_w11_1}", f"delta_w21_1 = {corr_w21_1}", f"delta_b_h1  = {corr_b_h1}"])
-
-	print("Mise à jour (h1)")
-	_print_entrees([f"w11_1 = {w11_1}, delta_w11_1 = {corr_w11_1}", f"w21_1 = {w21_1}, delta_w21_1 = {corr_w21_1}", f"b_h1  = {b_h1}, delta_b_h1  = {corr_b_h1}"])
-	new_w11_1 = Neurone.maj(w11_1, corr_w11_1)
-	new_w21_1 = Neurone.maj(w21_1, corr_w21_1)
-	new_b_h1 = Neurone.maj(b_h1, corr_b_h1)
-	_print_sorties([f"w11_1 -> {new_w11_1}", f"w21_1 -> {new_w21_1}", f"b_h1  -> {new_b_h1}"])
-
-	print("Facteur de correction (h2)")
-	_print_entrees([f"eta = {eta}", f"x1 = {x1}, delta = {delta_h2}", f"x2 = {x2}, delta = {delta_h2}", f"x = 1 (biais), delta = {delta_h2}"])
-	corr_w12_1 = Neurone.Correcteur(eta, x1, delta_h2)
-	corr_w22_1 = Neurone.Correcteur(eta, x2, delta_h2)
-	corr_b_h2 = Neurone.Correcteur(eta, 1, delta_h2)
-	_print_sorties([f"delta_w12_1 = {corr_w12_1}", f"delta_w22_1 = {corr_w22_1}", f"delta_b_h2  = {corr_b_h2}"])
-
-	print("Mise à jour (h2)")
-	_print_entrees([f"w12_1 = {w12_1}, delta_w12_1 = {corr_w12_1}", f"w22_1 = {w22_1}, delta_w22_1 = {corr_w22_1}", f"b_h2  = {b_h2}, delta_b_h2  = {corr_b_h2}"])
-	new_w12_1 = Neurone.maj(w12_1, corr_w12_1)
-	new_w22_1 = Neurone.maj(w22_1, corr_w22_1)
-	new_b_h2 = Neurone.maj(b_h2, corr_b_h2)
-	_print_sorties([f"w12_1 -> {new_w12_1}", f"w22_1 -> {new_w22_1}", f"b_h2  -> {new_b_h2}"])
-
-	# Résumé court des mises à jour (pratique pour comparer)
 	print("\n=== RESUME (poids mis à jour) ===")
 	_print_sorties(
 		[
-			f"Couche 2: (w11_2,w21_2,b_o1) -> ({new_w11_2},{new_w21_2},{new_b_o1})",
-			f"Couche 2: (w12_2,w22_2,b_o2) -> ({new_w12_2},{new_w22_2},{new_b_o2})",
-			f"Couche 2: (w13_2,w23_2,b_o3) -> ({new_w13_2},{new_w23_2},{new_b_o3})",
-			f"Couche 1: (w11_1,w21_1,b_h1) -> ({new_w11_1},{new_w21_1},{new_b_h1})",
-			f"Couche 1: (w12_1,w22_1,b_h2) -> ({new_w12_1},{new_w22_1},{new_b_h2})",
+			f"Couche 2: W2 {shape_str(new_W2)}, b2 {shape_str(new_b2)}",
+			"W2=",
+			*matrix_lines(new_W2, precision=12),
+			"b2=",
+			*vector_lines(new_b2, as_column=True, precision=12),
+			f"Couche 1: W1 {shape_str(new_W1)}, b1 {shape_str(new_b1)}",
+			"W1=",
+			*matrix_lines(new_W1, precision=12),
+			"b1=",
+			*vector_lines(new_b1, as_column=True, precision=12),
 		]
 	)
+
+	return results
 
 
 # ==================== main =========================
