@@ -21,7 +21,7 @@ from typing import Dict, List, Sequence, Tuple
 # Permettre l'import des modules depuis le dossier parent
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from neurone.backpp_neurone_mat import NeuroneMat  # noqa: E402
+from neurone.reso2neurone import NeuroneMat  # noqa: E402
 
 
 Vector = List[float]

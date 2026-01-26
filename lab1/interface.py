@@ -19,7 +19,9 @@ Notes:
 from __future__ import annotations
 
 import json
+import importlib
 import os
+import sys
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -82,6 +84,7 @@ def _safe_float(value: str, default: float) -> float:
 		return default
 
 
+# ==================== _try_float =========================
 def _try_float(value: str) -> Optional[float]:
 	"""Retourne un float ou None si vide/invalide."""
 
@@ -94,6 +97,7 @@ def _try_float(value: str) -> Optional[float]:
 		return None
 
 
+# ==================== _mse =========================
 def _mse(d, y) -> float:
 	"""Mean Squared Error entre deux vecteurs."""
 
@@ -105,10 +109,40 @@ def _mse(d, y) -> float:
 	return sum((float(d[i]) - float(y[i])) ** 2 for i in range(n)) / float(n)
 
 
+# ==================== _resolve_learning_api =========================
+def _resolve_learning_api():
+	"""Retourne (apprendre_une_iteration, generer_reseau_dynamique).
+
+	Essaye d'abord `projet1`, puis `learn`, et s'assure que le dossier courant
+	de ce fichier est dans `sys.path` pour éviter les problèmes de chemin.
+	"""
+
+	this_dir = os.path.dirname(__file__)
+	if this_dir and this_dir not in sys.path:
+		sys.path.insert(0, this_dir)
+
+	last_err: Optional[Exception] = None
+	for module_name in ("projet1", "learn"):
+		try:
+			module = importlib.import_module(module_name)
+			apprendre = getattr(module, "apprendre_une_iteration")
+			generer = getattr(module, "generer_reseau_dynamique")
+			return apprendre, generer
+		except (ModuleNotFoundError, ImportError, AttributeError) as exc:
+			last_err = exc
+			continue
+
+	raise ImportError(
+		"Impossible de trouver l'API d'apprentissage (apprendre_une_iteration / "
+		"generer_reseau_dynamique) dans projet1.py ou learn.py."
+	) from last_err
+
+
 # ==================== ConfigField =========================
 class ConfigField(ctk.CTkFrame):
 	"""Petit widget: rond (case) + entrée + texte de plage."""
 
+	# ==================== __init__ =========================
 	def __init__(self, master, spec: FieldSpec):
 		super().__init__(master, fg_color=_BG)
 		self.spec = spec
@@ -255,6 +289,7 @@ class Projet1HMI(ctk.CTk):
 
 		self.fields: Dict[str, ConfigField] = {}
 
+		# ==================== add_row =========================
 		def add_row(row_index: int, specs):
 			row_frame = ctk.CTkFrame(grid, fg_color=_BG)
 			row_frame.grid(row=row_index, column=0, sticky="w", pady=(10, 16))
@@ -457,10 +492,7 @@ class Projet1HMI(ctk.CTk):
 
 		# Import local pour éviter tout souci de chemin au démarrage.
 		# Le projet peut avoir le code dans learn.py ou dans projet1.py.
-		try:
-			from learn import apprendre_une_iteration, generer_reseau_dynamique
-		except ModuleNotFoundError:
-			from projet1 import apprendre_une_iteration, generer_reseau_dynamique
+		apprendre_une_iteration, generer_reseau_dynamique = _resolve_learning_api()
 
 		nx = _safe_int(self.fields["nx"].get_value(), 5)
 		nc = _safe_int(self.fields["nc"].get_value(), 4)
