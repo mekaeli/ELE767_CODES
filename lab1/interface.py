@@ -144,6 +144,7 @@ class ConfigField(ctk.CTkFrame):
 
 	# ==================== __init__ =========================
 	def __init__(self, master, spec: FieldSpec):
+		"""Construit un champ de configuration (label + checkbox + entry)."""
 		super().__init__(master, fg_color=_BG)
 		self.spec = spec
 
@@ -201,6 +202,7 @@ class Projet1HMI(ctk.CTk):
 
 	# ==================== __init__ =========================
 	def __init__(self):
+		"""Construit la fenêtre et tous les widgets de l'interface."""
 		super().__init__()
 
 		ctk.set_appearance_mode(appearance_mode)
@@ -291,6 +293,7 @@ class Projet1HMI(ctk.CTk):
 
 		# ==================== add_row =========================
 		def add_row(row_index: int, specs):
+			"""Ajoute une rangée de champs ConfigField dans la grille."""
 			row_frame = ctk.CTkFrame(grid, fg_color=_BG)
 			row_frame.grid(row=row_index, column=0, sticky="w", pady=(10, 16))
 

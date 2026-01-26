@@ -78,6 +78,7 @@ class NeuroneMat:
 		b_list: Sequence[List[float]],
 		d_list: Sequence[float],
 	) -> None:
+		"""Vérifie la cohérence des dimensions (X, W, b, d) avant le calcul."""
 		if len(w_list) == 0:
 			raise ValueError("w_list ne doit pas être vide.")
 
@@ -122,6 +123,7 @@ class NeuroneMat:
 	# ==================== _matvec =========================
 	@staticmethod
 	def _matvec(W: List[List[float]], x: Sequence[float]) -> List[float]:
+		"""Calcule le produit matriciel simplifié: x @ W (x vecteur ligne)."""
 		if len(W) != len(x):
 			raise ValueError("Dimensions incompatibles: len(W) doit être égal à len(x).")
 
@@ -136,6 +138,7 @@ class NeuroneMat:
 	# ==================== _vec_add =========================
 	@staticmethod
 	def _vec_add(a: Sequence[float], b: Sequence[float]) -> List[float]:
+		"""Additionne deux vecteurs de même taille."""
 		if len(a) != len(b):
 			raise ValueError("Addition impossible: vecteurs de tailles différentes.")
 		return [float(ai) + float(bi) for ai, bi in zip(a, b)]
@@ -143,6 +146,7 @@ class NeuroneMat:
 	# ==================== _vec_mul =========================
 	@staticmethod
 	def _vec_mul(a: Sequence[float], b: Sequence[float]) -> List[float]:
+		"""Multiplie deux vecteurs élément par élément (même taille)."""
 		if len(a) != len(b):
 			raise ValueError("Produit impossible: vecteurs de tailles différentes.")
 		return [float(ai) * float(bi) for ai, bi in zip(a, b)]
@@ -150,21 +154,25 @@ class NeuroneMat:
 	# ==================== _outer =========================
 	@staticmethod
 	def _outer(x: Sequence[float], y: Sequence[float]) -> List[List[float]]:
+		"""Calcule le produit extérieur: outer(x, y)."""
 		return [[float(xi) * float(yj) for yj in y] for xi in x]
 
 	# ==================== _scale_matrix =========================
 	@staticmethod
 	def _scale_matrix(W: List[List[float]], alpha: float) -> List[List[float]]:
+		"""Multiplie une matrice par un scalaire."""
 		return [[float(alpha) * float(wij) for wij in row] for row in W]
 
 	# ==================== _scale_vector =========================
 	@staticmethod
 	def _scale_vector(v: Sequence[float], alpha: float) -> List[float]:
+		"""Multiplie un vecteur par un scalaire."""
 		return [float(alpha) * float(vi) for vi in v]
 
 	# ==================== _matrix_add =========================
 	@staticmethod
 	def _matrix_add(A: List[List[float]], B: List[List[float]]) -> List[List[float]]:
+		"""Additionne deux matrices de mêmes dimensions."""
 		if len(A) != len(B):
 			raise ValueError("Addition impossible: matrices de tailles différentes (nb lignes).")
 
@@ -178,6 +186,7 @@ class NeuroneMat:
 	# ==================== _transpose_matvec =========================
 	@staticmethod
 	def _transpose_matvec(W: List[List[float]], delta_next: Sequence[float]) -> List[float]:
+		"""Calcule err_prev = W @ delta_next (utile pour remonter l'erreur)."""
 		n_in = len(W)
 		n_out = len(W[0])
 		if len(delta_next) != n_out:
@@ -195,6 +204,7 @@ class NeuroneMat:
 	# ==================== _activation_scalar =========================
 	@staticmethod
 	def _activation_scalar(i: float, n_fct: int) -> Tuple[float, float]:
+		"""Retourne (Fi, Fp) pour un scalaire i selon n_fct (1..4)."""
 		if n_fct == 1:
 			Fi, Fp = sigmoide_et_derivative(i)
 			return float(Fi), float(Fp)
@@ -219,6 +229,7 @@ class NeuroneMat:
 		b: Sequence[float],
 		n_fct: int,
 	) -> Tuple[List[float], List[float], List[float]]:
+		"""Fait la propagation avant d'une couche: z, a, fp."""
 		z = self._vec_add(self._matvec(W, x), b)
 		a: List[float] = []
 		fp: List[float] = []
@@ -236,6 +247,7 @@ class NeuroneMat:
 		b_list: Sequence[List[float]],
 		n_fct: int,
 	) -> Tuple[List[float], ForwardCache]:
+		"""Fait la propagation avant complète et retourne (y, cache)."""
 		if len(w_list) != len(b_list):
 			raise ValueError("w_list et b_list doivent avoir la même longueur.")
 
@@ -256,6 +268,7 @@ class NeuroneMat:
 	# ==================== Delta =========================
 	@staticmethod
 	def Delta(d_list: Sequence[float], Fi_list: Sequence[float], Fp_list: Sequence[float]) -> List[float]:
+		"""Calcule le delta de la couche de sortie: (d - y) ⊙ fp."""
 		if len(d_list) != len(Fi_list) or len(Fi_list) != len(Fp_list):
 			raise ValueError("d_list, Fi_list et Fp_list doivent avoir la même taille.")
 		return [(float(d) - float(Fi)) * float(Fp) for d, Fi, Fp in zip(d_list, Fi_list, Fp_list)]
@@ -263,6 +276,7 @@ class NeuroneMat:
 	# ==================== Delta_cache =========================
 	@staticmethod
 	def Delta_cache(delta_next: Sequence[float], W_next: List[List[float]], Fp_current: Sequence[float]) -> List[float]:
+		"""Calcule le delta d'une couche cachée à partir de la couche suivante."""
 		err_prev = NeuroneMat._transpose_matvec(W_next, delta_next)
 		return NeuroneMat._vec_mul(err_prev, Fp_current)
 
@@ -273,6 +287,7 @@ class NeuroneMat:
 		a_prev: Sequence[float],
 		delta_current: Sequence[float],
 	) -> Tuple[List[List[float]], List[float]]:
+		"""Calcule les corrections delta_W et delta_b pour une couche."""
 		delta_W = NeuroneMat._scale_matrix(NeuroneMat._outer(a_prev, delta_current), float(eta))
 		delta_b = NeuroneMat._scale_vector(delta_current, float(eta))
 		return delta_W, delta_b
@@ -285,6 +300,7 @@ class NeuroneMat:
 		b: Sequence[float],
 		delta_b: Sequence[float],
 	) -> Tuple[List[List[float]], List[float]]:
+		"""Applique la mise à jour: W <- W + delta_W, b <- b + delta_b."""
 		new_W = NeuroneMat._matrix_add(W, delta_W)
 		new_b = NeuroneMat._vec_add(b, delta_b)
 		return new_W, new_b
@@ -299,6 +315,7 @@ class NeuroneMat:
 		eta: float,
 		n_fct: int,
 	) -> Tuple[List[List[List[float]]], List[List[float]], List[float]]:
+		"""Fait une itération complète (forward + backprop + mise à jour)."""
 		self._validate_shapes(X, w_list, b_list, d_list)
 		y, cache = self.forward(X, w_list, b_list, n_fct)
 
@@ -340,6 +357,7 @@ class mon_reso:
 
 	# ==================== __init__ =========================
 	def __init__(self, n_in: int, n_c: int, N_b: List[int], biais, poids, X, D):
+		"""Initialise la configuration du réseau (dimensions + bornes)."""
 		self.n_in = int(n_in)
 		self.n_c = int(n_c)
 		self.N_b = list(N_b)
@@ -442,6 +460,7 @@ class mon_reso:
 
 		# ==================== _get_by_prefix =========================
 		def _get_by_prefix(prefix: str):
+			"""Retourne (clé, valeur) du premier champ dont la clé commence par prefix."""
 			for k, v in struct_reso.items():
 				if isinstance(k, str) and k.startswith(prefix):
 					return k, v
@@ -449,6 +468,7 @@ class mon_reso:
 
 		# ==================== _fmt =========================
 		def _fmt(x: float, p: int = 6) -> str:
+			"""Formate un nombre pour l'affichage (entiers propres, petits zéros, précision)."""
 			try:
 				xf = float(x)
 			except Exception:
@@ -461,6 +481,7 @@ class mon_reso:
 
 		# ==================== _fmt_vec =========================
 		def _fmt_vec(v: List[float], p: int = 6) -> str:
+			"""Formate un vecteur sous la forme: [v1, v2, ...]."""
 			return "[" + ", ".join(_fmt(x, p) for x in v) + "]"
 
 		# ==================== _print_assign =========================
@@ -568,6 +589,7 @@ class mon_reso:
 
 		# ==================== _get_by_prefix =========================
 		def _get_by_prefix(prefix: str):
+			"""Retourne (clé, valeur) du premier champ dont la clé commence par prefix."""
 			for k, v in struct_reso.items():
 				if isinstance(k, str) and k.startswith(prefix):
 					return k, v
@@ -596,19 +618,23 @@ class mon_reso:
 		# Helpers de conversion (valeurs -> paires en gardant les noms)
 		# ==================== _is_pair =========================
 		def _is_pair(x) -> bool:
+			"""Vrai si x est un couple (nom, valeur)."""
 			return isinstance(x, tuple) and len(x) == 2
 
 		# ==================== _is_pair_list =========================
 		def _is_pair_list(lst) -> bool:
+			"""Vrai si lst est une liste de couples (nom, valeur) (ou vide)."""
 			return isinstance(lst, list) and (len(lst) == 0 or _is_pair(lst[0]))
 
 		# ==================== _ensure_list =========================
 		def _ensure_list(obj, label: str) -> None:
+			"""Valide que obj est une liste, sinon lève une erreur lisible."""
 			if not isinstance(obj, list):
 				raise ValueError(f"{label}: type invalide. Attendu une liste, reçu {type(obj).__name__}.")
 
 		# ==================== _ensure_pair_list =========================
 		def _ensure_pair_list(lst: list, label: str, expected_len: int | None = None) -> None:
+			"""Valide que lst est une liste de (nom,valeur) et (optionnel) la longueur attendue."""
 			for idx, item in enumerate(lst, start=1):
 				if not _is_pair(item):
 					raise ValueError(
@@ -621,6 +647,7 @@ class mon_reso:
 
 		# ==================== _to_pairs_1d =========================
 		def _to_pairs_1d(old_pairs, new_data, label: str):
+			"""Convertit un vecteur (1D) en liste de paires en conservant les noms d'origine."""
 			_ensure_list(old_pairs, f"struct_reso.{label}")
 			_ensure_list(new_data, label)
 
@@ -636,6 +663,7 @@ class mon_reso:
 
 		# ==================== _to_pairs_2d =========================
 		def _to_pairs_2d(old_layers, new_layers, label: str):
+			"""Convertit des couches (2D) en paires en conservant les noms d'origine."""
 			_ensure_list(old_layers, f"struct_reso.{label}")
 			_ensure_list(new_layers, label)
 			if len(new_layers) != len(old_layers):
@@ -702,6 +730,7 @@ class backpp:
 
 	# ==================== __init__ =========================
 	def __init__(self, struct_reso: Dict[str, object], n_fct: int = 1, eta: float = 0.1):
+		"""Initialise le solveur (struct_reso + paramètres n_fct/eta)."""
 		self.struct_reso = struct_reso
 		self.n_fct = int(n_fct)
 		self.eta = float(eta)
@@ -710,6 +739,7 @@ class backpp:
 	# ==================== _get_by_prefix =========================
 	@staticmethod
 	def _get_by_prefix(struct_reso: Dict[str, object], prefix: str):
+		"""Retourne (clé, valeur) du premier champ dont la clé commence par prefix."""
 		for k, v in struct_reso.items():
 			if isinstance(k, str) and k.startswith(prefix):
 				return k, v
@@ -908,6 +938,7 @@ class backpp:
 	# ==================== _nom_fct =========================
 	@staticmethod
 	def _nom_fct(n_fct: int) -> str:
+		"""Retourne le nom lisible de la fonction d'activation (1..4)."""
 		return {1: "sigmoïde", 2: "tan", 3: "tanh", 4: "gelu"}.get(n_fct, f"n_fct={n_fct}")
 
 	# ==================== _fmt =========================
@@ -931,6 +962,7 @@ class backpp:
 	# ==================== _fmt_vec =========================
 	@classmethod
 	def _fmt_vec(cls, v: List[float], precision: int = 6) -> str:
+		"""Formate un vecteur sous la forme: [v1, v2, ...]."""
 		return "[" + ", ".join(cls._fmt(x, precision) for x in v) + "]"
 
 	# ==================== _fmt_mat =========================
@@ -942,6 +974,7 @@ class backpp:
 		row_labels: List[str] | None = None,
 		col_labels: List[str] | None = None,
 	) -> str:
+		"""Formate une matrice en tableau aligné (avec en-tête optionnel)."""
 		if not M:
 			return "[]"
 		n_rows = len(M)
@@ -1000,6 +1033,7 @@ class backpp:
 	# ==================== _print_step =========================
 	@staticmethod
 	def _print_step(title: str) -> None:
+		"""Affiche un séparateur de section du style: --- Titre ---"""
 		print(f"\n--- {title} ---")
 
 	# ==================== resolution_affiche =========================
