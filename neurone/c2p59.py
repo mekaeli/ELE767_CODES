@@ -18,6 +18,20 @@ from neurone.reso2neurone import console_utils
 
 PRECISION = 6
 
+
+def _env_int(name: str, default: int) -> int:
+	try:
+		return int(os.environ.get(name, str(default)).strip())
+	except Exception:
+		return default
+
+
+def _env_float(name: str, default: float) -> float:
+	try:
+		return float(os.environ.get(name, str(default)).strip().replace(",", "."))
+	except Exception:
+		return default
+
 # ==================== test_reso =========================
 def test_reso() -> None:
 	"""Construit un petit réseau, le met dans struct_reso, puis lance 1 itération."""
@@ -79,8 +93,8 @@ def test_reso() -> None:
 	Dn_s = [d1]
 
 	# 6) Hyperparamètres
-	n_fct = 1
-	eta = 0.1
+	n_fct = _env_int("N_FCT", 1)
+	eta = _env_float("ETA", 0.1)
 
 	# ==================== Exécution (NE PAS MODIFIER) ====================
 

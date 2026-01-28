@@ -1,555 +1,723 @@
-
-"""Interface HMI (Projet 1) avec CustomTkinter.
-
-But:
-	Créer une interface graphique proche de l'image fournie:
-	  - sélection de mode (Généralisation / Validation / Apprentissage)
-	  - champs de configuration (entrées, couches, marges, etc.)
-	  - boutons Get config / Set config
-	  - flèches (haut/bas)
-	  - bouton Exécuter
-
-Notes:
-	- Dépendance: customtkinter
-		pip install customtkinter
-	- Ici on construit surtout l'UI. Les actions Get/Set/Exécuter sont fournies
-	  sous forme de fonctions simples (faciles à brancher au reste du projet).
-"""
-
 from __future__ import annotations
 
+"""Interface HMI du laboratoire 1 (CustomTkinter).
+
+- Affiche une interface sombre (thème) pour configurer un petit réseau de neurones.
+- Valide les champs (plages min/max) avant exécution.
+- Peut sauvegarder/charger la configuration dans `lab1/config,json`.
+- Lance `neurone/c2p59.py` avec des variables d'environnement (N_FCT, ETA).
+"""
+
+import ctypes
 import json
-import importlib
 import os
+import subprocess
 import sys
-from dataclasses import dataclass
-from typing import Dict, Optional
+from pathlib import Path
+import tkinter.messagebox as messagebox
+from tkinter import filedialog
+
+import customtkinter as ctk
 
 
-# ==================== Import CustomTkinter =========================
-try:
-	import customtkinter as ctk
-except ModuleNotFoundError as exc:  # pragma: no cover
-	raise ModuleNotFoundError(
-		"customtkinter n'est pas installé. Lance: pip install customtkinter"
-	) from exc
+# ========================
+# Couleurs (harmonisées, futuriste cyan)
+# ========================
+COLOR_BG = "#0F1420"           # fond principal (navy profond)
+COLOR_PANEL = "#151D2B"        # panneaux
+COLOR_ENTRY = "#0D1320"        # champs / dropdown
+COLOR_BORDER = "#26344D"       # contours (bleu-gris)
+
+# Hiérarchie typographique (nuances non-blanches)
+COLOR_TEXT_TITLE = "#CFF6FF"   # titres (cyan glacé)
+COLOR_TEXT = "#BFD6F2"         # texte principal (bleu clair)
+COLOR_TEXT_MUTED = "#8FA8C8"   # labels secondaires
+COLOR_TEXT_HINT = "#6F86A6"    # indications / plages / aides
+
+# Accent (néon doux)
+COLOR_ACCENT = "#22D3EE"       # cyan
+COLOR_ACCENT_HOVER = "#06B6D4" # cyan plus dense
+COLOR_ON_ACCENT = "#071018"    # texte sur accent (très sombre)
+
+CONTENT_WIDTH = 700
+ENTRY_W = 90
+SCORE_W = 120
+ACT_W = 170
+CELL_W = 100
+CELL_H = 112
+BTN_W = 120
+BTN_H = 30
 
 
-# ==================== Constantes UI =========================
-_APP_TITLE = "Projet 1 — HMI"
-_APP_SIZE = "860x560"
+# ==================== _enable_windows_dpi_awareness =========================
+def _enable_windows_dpi_awareness() -> None:
+	"""Active le DPI-aware sous Windows.
 
-# Paramètres demandés
-appearance_mode: str = "dark"
-color_theme: str = "blue"
-root_bg_color: str = "#0f172a"
-
-_BG = root_bg_color
-_TEXT = "#cbd5e1"  # blanc moins vif
-_BORDER = "#334155"  # bordures non blanches (slate)
-_BLUE = "#3B8ED0"
-_GREEN = "#2E9E2E"
-
-_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config,json")
-
-
-# ==================== FieldSpec =========================
-@dataclass(frozen=True)
-class FieldSpec:
-	"""Description d'un champ (label + plage de valeurs)."""
-
-	key: str
-	title: str
-	hint: str
-	default_value: str
-
-
-# ==================== _safe_int =========================
-def _safe_int(value: str, default: int) -> int:
-	"""Convertit en int; si impossible, retourne default."""
-
-	try:
-		return int(value.strip())
-	except Exception:
-		return default
-
-
-# ==================== _safe_float =========================
-def _safe_float(value: str, default: float) -> float:
-	"""Convertit en float; si impossible, retourne default."""
-
-	try:
-		return float(value.strip().replace(",", "."))
-	except Exception:
-		return default
-
-
-# ==================== _try_float =========================
-def _try_float(value: str) -> Optional[float]:
-	"""Retourne un float ou None si vide/invalide."""
-
-	v = value.strip()
-	if not v:
-		return None
-	try:
-		return float(v.replace(",", "."))
-	except Exception:
-		return None
-
-
-# ==================== _mse =========================
-def _mse(d, y) -> float:
-	"""Mean Squared Error entre deux vecteurs."""
-
-	if not d or not y:
-		return 0.0
-	n = min(len(d), len(y))
-	if n == 0:
-		return 0.0
-	return sum((float(d[i]) - float(y[i])) ** 2 for i in range(n)) / float(n)
-
-
-# ==================== _resolve_learning_api =========================
-def _resolve_learning_api():
-	"""Retourne (apprendre_une_iteration, generer_reseau_dynamique).
-
-	Essaye d'abord `projet1`, puis `learn`, et s'assure que le dossier courant
-	de ce fichier est dans `sys.path` pour éviter les problèmes de chemin.
+	But: éviter que Windows "étire" l'application en bitmap (texte flou).
+	Aucun impact sur les tailles définies dans le code.
 	"""
-
-	this_dir = os.path.dirname(__file__)
-	if this_dir and this_dir not in sys.path:
-		sys.path.insert(0, this_dir)
-
-	last_err: Optional[Exception] = None
-	for module_name in ("projet1", "learn"):
+	if sys.platform != "win32":
+		return
+	try:
+		# 2 = PROCESS_PER_MONITOR_DPI_AWARE
+		ctypes.windll.shcore.SetProcessDpiAwareness(2)
+	except Exception:
 		try:
-			module = importlib.import_module(module_name)
-			apprendre = getattr(module, "apprendre_une_iteration")
-			generer = getattr(module, "generer_reseau_dynamique")
-			return apprendre, generer
-		except (ModuleNotFoundError, ImportError, AttributeError) as exc:
-			last_err = exc
-			continue
-
-	raise ImportError(
-		"Impossible de trouver l'API d'apprentissage (apprendre_une_iteration / "
-		"generer_reseau_dynamique) dans projet1.py ou learn.py."
-	) from last_err
+			ctypes.windll.user32.SetProcessDPIAware()
+		except Exception:
+			pass
 
 
-# ==================== ConfigField =========================
-class ConfigField(ctk.CTkFrame):
-	"""Petit widget: rond (case) + entrée + texte de plage."""
-
-	# ==================== __init__ =========================
-	def __init__(self, master, spec: FieldSpec):
-		"""Construit un champ de configuration (label + checkbox + entry)."""
-		super().__init__(master, fg_color=_BG)
-		self.spec = spec
-
-		self.label = ctk.CTkLabel(self, text=spec.title, text_color=_TEXT)
-		self.label.grid(row=0, column=0, sticky="w")
-
-		# Petit rond (ressemble au cercle de l'image)
-		self.enabled_var = ctk.BooleanVar(value=True)
-		self.enabled = ctk.CTkCheckBox(
-			self,
-			text="",
-			variable=self.enabled_var,
-			width=24,
-			checkbox_width=22,
-			checkbox_height=22,
-			corner_radius=11,
-			border_width=2,
-			fg_color=_BLUE,
-			border_color=_BORDER,
-		)
-		self.enabled.grid(row=1, column=0, pady=(6, 6))
-
-		self.entry = ctk.CTkEntry(
-			self,
-			width=70,
-			height=34,
-			border_width=2,
-			border_color=_BORDER,
-			fg_color=_BG,
-			text_color=_TEXT,
-		)
-		self.entry.grid(row=2, column=0)
-		self.entry.insert(0, spec.default_value)
-
-		self.hint = ctk.CTkLabel(self, text=spec.hint, text_color=_TEXT)
-		self.hint.grid(row=3, column=0, pady=(6, 0))
-
-	# ==================== get_value =========================
-	def get_value(self) -> str:
-		"""Retourne le texte de l'entrée (même si invalide)."""
-
-		return self.entry.get().strip()
-
-	# ==================== set_value =========================
-	def set_value(self, value: str) -> None:
-		"""Écrit une valeur dans l'entrée."""
-
-		self.entry.delete(0, "end")
-		self.entry.insert(0, str(value))
+FONT_FAMILY = "Segoe UI"
 
 
-# ==================== Projet1HMI =========================
-class Projet1HMI(ctk.CTk):
-	"""Fenêtre principale."""
+ctk.set_appearance_mode("Dark")
+_enable_windows_dpi_awareness()
+
+
+CONFIG_PATH = Path(__file__).with_name("config,json")
+
+
+class HMIApp(ctk.CTk):
+	"""Fenêtre principale de l'interface."""
 
 	# ==================== __init__ =========================
-	def __init__(self):
-		"""Construit la fenêtre et tous les widgets de l'interface."""
+	def __init__(self) -> None:
+		"""Crée la fenêtre et construit tous les widgets."""
 		super().__init__()
-
-		ctk.set_appearance_mode(appearance_mode)
-		ctk.set_default_color_theme(color_theme)
-
-		self.title(_APP_TITLE)
-		self.geometry(_APP_SIZE)
-		self.minsize(860, 560)
+		self.title("HMI - Réseaux de neurones")
+		self.geometry("760x760")
+		self.minsize(760, 760)
 		self.resizable(False, False)
-		self.configure(fg_color=_BG)
+		self.configure(fg_color=COLOR_BG)
 
-		# Cadre avec une bordure noire (comme l'image)
-		self.root_frame = ctk.CTkFrame(self, fg_color=_BG, border_width=2, border_color=_BORDER, corner_radius=0)
-		self.root_frame.pack(fill="both", expand=True, padx=12, pady=12)
+		self._build_ui()
 
-		self._build_top_mode()
-		self._build_config_grid()
-		self._build_bottom_bar()
+	# ==================== _build_ui =========================
+	def _build_ui(self) -> None:
+		"""Construit toute l'interface (layout + widgets)."""
+		root_frame = ctk.CTkFrame(
+			self,
+			fg_color=COLOR_PANEL,
+			border_color=COLOR_BORDER,
+			border_width=2,
+			corner_radius=18,
+		)
+		root_frame.pack(fill="both", expand=True, padx=18, pady=18)
 
-	# ==================== _build_top_mode =========================
-	def _build_top_mode(self) -> None:
-		"""Construit la zone du haut: radios + texte "Mode sélectionné"."""
+		root_frame.grid_columnconfigure(0, weight=1)
+		# Répartir l'espace vertical: le tableau (bas) prend le reste.
+		root_frame.grid_rowconfigure(0, weight=0)
+		root_frame.grid_rowconfigure(1, weight=0)
+		root_frame.grid_rowconfigure(2, weight=1)
 
-		top = ctk.CTkFrame(self.root_frame, fg_color=_BG)
-		top.pack(fill="x", padx=18, pady=(18, 6))
+		# ---------- En-tête ----------
+		header_frame = ctk.CTkFrame(root_frame, fg_color="transparent")
+		header_frame.grid(row=0, column=0, pady=(14, 4), sticky="ew")
 
 		self.mode_var = ctk.StringVar(value="Généralisation")
+		radio_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+		radio_frame.pack(pady=(2, 8))
 
-		radio_frame = ctk.CTkFrame(top, fg_color=_BG)
-		radio_frame.pack(anchor="w")
-
-		for label in ("Généralisation", "Validation", "Apprentissage"):
-			rb = ctk.CTkRadioButton(
-				radio_frame,
-				text=label,
-				value=label,
-				variable=self.mode_var,
-				text_color=_TEXT,
-				fg_color=_BLUE,
-				border_color=_BORDER,
-				command=self._on_mode_change,
-			)
-			rb.pack(side="left", padx=(0, 30))
+		self._add_radio(radio_frame, "Généralisation").pack(side="left", padx=16)
+		self._add_radio(radio_frame, "Validation").pack(side="left", padx=16)
+		self._add_radio(radio_frame, "Apprentissage").pack(side="left", padx=16)
 
 		self.mode_label = ctk.CTkLabel(
-			top,
-			text=f"Mode sélectionné : {self.mode_var.get()}",
-			text_color=_TEXT,
-			font=ctk.CTkFont(size=22, weight="normal"),
+			header_frame,
+			text="Mode sélectionné : Généralisation",
+			text_color=COLOR_TEXT_TITLE,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=18, weight="bold"),
 		)
-		self.mode_label.pack(anchor="w", pady=(14, 6))
+		self.mode_label.pack(pady=(0, 10))
 
-		self.source_label = ctk.CTkLabel(top, text="Fichier source", text_color=_TEXT)
-		self.source_label.pack(anchor="center", pady=(2, 0))
+		file_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+		file_frame.pack(pady=(0, 4))
 
-	# ==================== _on_mode_change =========================
-	def _on_mode_change(self) -> None:
-		"""Met à jour le texte après changement de mode."""
+		ctk.CTkLabel(
+			file_frame,
+			text="Fichier source",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="normal"),
+		).grid(row=0, column=0, columnspan=2, pady=(0, 6))
 
-		self.mode_label.configure(text=f"Mode sélectionné : {self.mode_var.get()}")
-
-	# ==================== _build_config_grid =========================
-	def _build_config_grid(self) -> None:
-		"""Construit la grille principale des champs + boutons Get/Set + flèches."""
-
-		grid = ctk.CTkFrame(self.root_frame, fg_color=_BG)
-		grid.pack(fill="both", expand=True, padx=18, pady=(10, 6))
-
-		# Row 1 (comme l'image)
-		specs_row1 = [
-			FieldSpec("nx", "Entrées", "4 ≤ x ≤ 128", "5"),
-			FieldSpec("nsc1", "Sous couche 1", "4 ≤ x ≤ 128", "15"),
-			FieldSpec("nsc2", "Sous couche 2", "4 ≤ x ≤ 128", "15"),
-			FieldSpec("ncs", "couche de sortie", "4 ≤ x ≤ 128", "10"),
-			FieldSpec("others", "Autres couches", "", ""),
-		]
-
-		# Row 2 (comme l'image)
-		specs_row2 = [
-			FieldSpec("nc", "Nb de couches", "3 ≤ x ≤ 10", "4"),
-			FieldSpec("b_margin", "Marge biais", "1 ≤ x ≤ 5", ""),
-			FieldSpec("w_margin", "Marge poids", "-0,1 ≤ x ≤ 0,1", ""),
-			FieldSpec("todo1", "a venir", "4 ≤ x ≤ 128", ""),
-			FieldSpec("todo2", "a venir", "", ""),
-		]
-
-		self.fields: Dict[str, ConfigField] = {}
-
-		# ==================== add_row =========================
-		def add_row(row_index: int, specs):
-			"""Ajoute une rangée de champs ConfigField dans la grille."""
-			row_frame = ctk.CTkFrame(grid, fg_color=_BG)
-			row_frame.grid(row=row_index, column=0, sticky="w", pady=(10, 16))
-
-			for col, spec in enumerate(specs):
-				f = ConfigField(row_frame, spec)
-				f.grid(row=0, column=col, padx=(0, 26))
-				self.fields[spec.key] = f
-
-		add_row(0, specs_row1)
-		add_row(1, specs_row2)
-
-		# Colonne droite: boutons Get/Set
-		btn_frame = ctk.CTkFrame(grid, fg_color=_BG)
-		btn_frame.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(10, 0), pady=(48, 0))
-
-		self.btn_get = ctk.CTkButton(
-			btn_frame,
-			text="Get config",
-			width=140,
-			height=40,
-			fg_color=_BLUE,
-			text_color="white",
-			corner_radius=10,
-			command=self.get_config,
+		self.file_entry = ctk.CTkEntry(
+			file_frame,
+			width=360,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
 		)
-		self.btn_get.pack(pady=(0, 10))
+		self.file_entry.grid(row=1, column=0, padx=(0, 8))
 
-		self.btn_set = ctk.CTkButton(
-			btn_frame,
-			text="Set config",
-			width=140,
-			height=40,
-			fg_color=_BLUE,
-			text_color="white",
-			corner_radius=10,
-			command=self.set_config,
-		)
-		self.btn_set.pack()
+		ctk.CTkButton(
+			file_frame,
+			text="...",
+			width=34,
+			height=28,
+			fg_color=COLOR_ACCENT,
+			hover_color=COLOR_ACCENT_HOVER,
+			text_color=COLOR_ON_ACCENT,
+			command=self._choose_file,
+		).grid(row=1, column=1)
 
-		# Flèches (haut/bas) à droite comme l'image
-		arrows = ctk.CTkFrame(grid, fg_color=_BG)
-		arrows.grid(row=1, column=1, sticky="se", padx=(10, 0), pady=(0, 20))
-
-		self.btn_up = ctk.CTkButton(
-			arrows,
-			text="▲",
-			width=44,
-			height=34,
+		# ---------- Zone paramètres ----------
+		param_container = ctk.CTkFrame(
+			root_frame,
 			fg_color="transparent",
-			hover=False,
-			text_color=_TEXT,
-			border_width=0,
-			command=lambda: None,
+			border_color=COLOR_BORDER,
+			border_width=2,
+			corner_radius=16,
 		)
-		self.btn_up.pack(pady=(0, 0))
+		param_container.configure(width=CONTENT_WIDTH)
+		param_container.grid(row=1, column=0, padx=16, pady=(10, 10), sticky="ew")
 
-		self.btn_down = ctk.CTkButton(
-			arrows,
-			text="▼",
-			width=44,
-			height=34,
-			fg_color="transparent",
-			hover=False,
-			text_color=_TEXT,
-			border_width=0,
-			command=lambda: None,
-		)
-		self.btn_down.pack(pady=(0, 0))
+		param_container.grid_columnconfigure(0, weight=1, minsize=CONTENT_WIDTH - (BTN_W + 16))
+		param_container.grid_columnconfigure(1, weight=0, minsize=BTN_W + 16)
 
-	# ==================== _build_bottom_bar =========================
-	def _build_bottom_bar(self) -> None:
-		"""Construit la barre du bas: option menu + scores + bouton Exécuter."""
+		self.entries: dict[str, ctk.CTkEntry] = {}
+		self.constraints: dict[str, tuple[float, float, str]] = {}
 
-		bottom = ctk.CTkFrame(self.root_frame, fg_color=_BG)
-		bottom.pack(fill="x", padx=18, pady=(0, 18))
+		# Titre du panneau
+		ctk.CTkLabel(
+			param_container,
+			text="Paramètres",
+			text_color=COLOR_TEXT_TITLE,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+		).grid(row=0, column=0, columnspan=2, pady=(10, 0))
 
-		# Fonction d'activation
-		act_frame = ctk.CTkFrame(bottom, fg_color=_BG)
-		act_frame.pack(side="left", padx=(0, 16))
-		ctk.CTkLabel(act_frame, text="Fonction act.", text_color=_TEXT).pack(anchor="w")
+		# Ligne activation + scores (dans le panneau)
+		top_row = ctk.CTkFrame(param_container, fg_color="transparent")
+		top_row.configure(width=CONTENT_WIDTH)
+		top_row.grid(row=1, column=0, columnspan=2, padx=12, pady=(8, 6), sticky="ew")
+		# Centrer le bloc (act + 2 scores) dans la frame
+		top_row.grid_columnconfigure(0, weight=1)
+		top_row.grid_columnconfigure(1, weight=0, minsize=ACT_W + 40)
+		top_row.grid_columnconfigure(2, weight=0, minsize=SCORE_W + 40)
+		top_row.grid_columnconfigure(3, weight=0, minsize=SCORE_W + 40)
+		top_row.grid_columnconfigure(4, weight=1)
+
+		ctk.CTkLabel(
+			top_row,
+			text="Fonction act.",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=0, column=1, padx=10, pady=(0, 4))
+
+		ctk.CTkLabel(
+			top_row,
+			text="Score attendu",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=0, column=2, padx=10, pady=(0, 4))
+
+		ctk.CTkLabel(
+			top_row,
+			text="Score obtenu",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=0, column=3, padx=10, pady=(0, 4))
+
 		self.act_var = ctk.StringVar(value="sigmoïde")
 		self.act_menu = ctk.CTkOptionMenu(
-			act_frame,
+			top_row,
 			values=["sigmoïde", "tan", "tanh", "gelu"],
 			variable=self.act_var,
-			fg_color=_BG,
-			button_color=_BORDER,
-			button_hover_color=_BORDER,
-			text_color=_TEXT,
-			dropdown_fg_color=_BG,
-			dropdown_text_color=_TEXT,
-			dropdown_hover_color="#1f2937",
-			corner_radius=10,
-			width=180,
+			fg_color=COLOR_ENTRY,
+			button_color=COLOR_ENTRY,
+			button_hover_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+			dropdown_fg_color=COLOR_ENTRY,
+			dropdown_text_color=COLOR_TEXT,
+			dropdown_hover_color=COLOR_BORDER,
+			width=ACT_W,
+			height=30,
 		)
-		self.act_menu.pack()
+		self.act_menu.grid(row=1, column=1, padx=10)
 
-		# Score attendu
-		score_frame = ctk.CTkFrame(bottom, fg_color=_BG)
-		score_frame.pack(side="left", padx=(0, 16))
-		ctk.CTkLabel(score_frame, text="Score attendu", text_color=_TEXT).pack(anchor="w")
-		self.score_expected = ctk.CTkEntry(
-			score_frame,
-			width=220,
-			height=36,
-			border_width=2,
-			border_color=_BORDER,
-			fg_color=_BG,
-			text_color=_TEXT,
+		score_attendu = ctk.CTkEntry(
+			top_row,
+			width=SCORE_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
 		)
-		self.score_expected.pack()
+		score_attendu.grid(row=1, column=2, padx=10)
 
-		# Score obtenu
-		score2_frame = ctk.CTkFrame(bottom, fg_color=_BG)
-		score2_frame.pack(side="left", padx=(0, 16))
-		ctk.CTkLabel(score2_frame, text="Score obtenu", text_color=_TEXT).pack(anchor="w")
-		self.score_obtained = ctk.CTkEntry(
-			score2_frame,
-			width=220,
-			height=36,
-			border_width=2,
-			border_color=_BORDER,
-			fg_color=_BG,
-			text_color=_TEXT,
+		score_obtenu = ctk.CTkEntry(
+			top_row,
+			width=SCORE_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
 		)
-		self.score_obtained.pack()
+		score_obtenu.grid(row=1, column=3, padx=10)
 
-		# Bouton Exécuter
-		self.btn_run = ctk.CTkButton(
-			bottom,
+		self.entries["score_attendu"] = score_attendu
+		self.constraints["score_attendu"] = (0, 1, "float")
+		self.entries["score_obtenu"] = score_obtenu
+		self.constraints["score_obtenu"] = (0, 1, "float")
+
+		# Grille principale des paramètres
+		param_grid = ctk.CTkFrame(param_container, fg_color="transparent")
+		# La grille doit être centrée par rapport à TOUTE la frame (incluant la zone des boutons)
+		param_grid.grid(row=2, column=0, columnspan=2, padx=12, pady=(8, 6), sticky="ew")
+		# Centrer les 5 cellules avec 2 colonnes "spacer" (gauche/droite)
+		param_grid.grid_columnconfigure(0, weight=1)
+		for col in range(1, 6):
+			param_grid.grid_columnconfigure(col, weight=0, uniform="param_cols", minsize=CELL_W)
+		param_grid.grid_columnconfigure(6, weight=1)
+
+		self._add_field(param_grid, "nb d’entrées", "1 ≤ Xn ≤ 480", 0, 1, "nb_entrees", 1, 480, "int")
+		self._add_field(param_grid, "nb couches\nCachées", "1 ≤ Cn ≤ 10", 0, 2, "nb_couches", 1, 10, "int")
+		self._add_field(param_grid, "nb neurones/\nCou. cachées", "1 ≤ Nn ≤ 10", 0, 3, "nb_neurones", 1, 10, "int")
+		self._add_field(param_grid, "nb de sorties", "1 ≤ Sn ≤ 10", 0, 4, "nb_sorties", 1, 10, "int")
+		self._add_field(param_grid, "taux\nd’apprentissage", "0.1 ≤ η ≤ 1", 0, 5, "taux_apprentissage", 0.1, 1, "float")
+
+		# Ligne basse (min/max + itérations/époques + boutons), centrée sur la frame
+		bottom_row = ctk.CTkFrame(param_container, fg_color="transparent")
+		bottom_row.grid(row=3, column=0, columnspan=2, padx=12, pady=(2, 12), sticky="ew")
+		bottom_row.grid_columnconfigure(0, weight=1)
+		bottom_row.grid_columnconfigure(1, weight=0)
+		bottom_row.grid_columnconfigure(2, weight=0)
+		bottom_row.grid_columnconfigure(3, weight=1)
+
+		lower_grid = ctk.CTkFrame(bottom_row, fg_color="transparent")
+		lower_grid.grid(row=0, column=1, sticky="w", padx=(0, 18))
+		lower_grid.grid_columnconfigure(0, weight=0, minsize=34)
+		lower_grid.grid_columnconfigure(1, weight=0, minsize=CELL_W)
+		lower_grid.grid_columnconfigure(2, weight=0, minsize=CELL_W)
+		lower_grid.grid_columnconfigure(3, weight=0, minsize=96)
+		lower_grid.grid_columnconfigure(4, weight=0, minsize=CELL_W)
+
+		ctk.CTkLabel(
+			lower_grid,
+			text="min",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=0, column=0, padx=(0, 8), pady=(6, 2), sticky="w")
+
+		ctk.CTkLabel(
+			lower_grid,
+			text="max",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=1, column=0, padx=(0, 8), pady=(6, 2), sticky="w")
+
+		bias_min = ctk.CTkEntry(
+			lower_grid,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		bias_min.grid(row=0, column=1, padx=(6, 10), pady=(4, 2), sticky="w")
+
+		bias_max = ctk.CTkEntry(
+			lower_grid,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		bias_max.grid(row=1, column=1, padx=(6, 10), pady=(4, 2), sticky="w")
+
+		poids_min = ctk.CTkEntry(
+			lower_grid,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		poids_min.grid(row=0, column=2, padx=(10, 10), pady=(4, 2), sticky="w")
+
+		poids_max = ctk.CTkEntry(
+			lower_grid,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		poids_max.grid(row=1, column=2, padx=(10, 10), pady=(4, 2), sticky="w")
+
+		ctk.CTkLabel(
+			lower_grid,
+			text="i itérations",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=0, column=3, padx=(12, 6), pady=(6, 2), sticky="e")
+
+		iter_entry = ctk.CTkEntry(
+			lower_grid,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		iter_entry.grid(row=0, column=4, padx=(0, 6), pady=(4, 2), sticky="w")
+
+		ctk.CTkLabel(
+			lower_grid,
+			text="k époques",
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).grid(row=1, column=3, padx=(12, 6), pady=(6, 2), sticky="e")
+
+		epoch_entry = ctk.CTkEntry(
+			lower_grid,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		epoch_entry.grid(row=1, column=4, padx=(0, 6), pady=(4, 2), sticky="w")
+
+		ctk.CTkLabel(
+			lower_grid,
+			text="1 ≤ biais ≤ 5",
+			text_color=COLOR_TEXT_HINT,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+		).grid(row=2, column=1, padx=(6, 0), pady=(4, 0), sticky="w")
+
+		ctk.CTkLabel(
+			lower_grid,
+			text="-0.1 ≤ Wn ≤ 0.1",
+			text_color=COLOR_TEXT_HINT,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+		).grid(row=2, column=2, padx=(10, 0), pady=(4, 0), sticky="w")
+
+		self.entries["biais_min"] = bias_min
+		self.constraints["biais_min"] = (1, 5, "float")
+		self.entries["biais_max"] = bias_max
+		self.constraints["biais_max"] = (1, 5, "float")
+		self.entries["poids_min"] = poids_min
+		self.constraints["poids_min"] = (-0.1, 0.1, "float")
+		self.entries["poids_max"] = poids_max
+		self.constraints["poids_max"] = (-0.1, 0.1, "float")
+		self.entries["iterations"] = iter_entry
+		self.constraints["iterations"] = (1, 1000000, "int")
+		self.entries["k_epoques"] = epoch_entry
+		self.constraints["k_epoques"] = (1, 1000000, "int")
+
+		# Colonne droite (boutons)
+		right_col = ctk.CTkFrame(bottom_row, fg_color="transparent")
+		right_col.grid(row=0, column=2, padx=(18, 0), pady=(4, 0), sticky="n")
+
+		ctk.CTkButton(
+			right_col,
+			text="Get config",
+			width=BTN_W,
+			height=BTN_H,
+			fg_color=COLOR_ACCENT,
+			hover_color=COLOR_ACCENT_HOVER,
+			text_color=COLOR_ON_ACCENT,
+			command=self._on_get_config,
+		).pack(pady=(8, 8))
+
+		ctk.CTkButton(
+			right_col,
+			text="Set config",
+			width=BTN_W,
+			height=BTN_H,
+			fg_color=COLOR_ACCENT,
+			hover_color=COLOR_ACCENT_HOVER,
+			text_color=COLOR_ON_ACCENT,
+			command=self._on_set_config,
+		).pack(pady=8)
+
+		ctk.CTkButton(
+			right_col,
 			text="Exécuter",
-			width=160,
-			height=40,
-			fg_color=_GREEN,
-			hover_color="#258525",
-			text_color="white",
-			corner_radius=10,
-			command=self.execute,
+			width=BTN_W,
+			height=BTN_H,
+			fg_color=COLOR_ACCENT,
+			hover_color=COLOR_ACCENT_HOVER,
+			text_color=COLOR_ON_ACCENT,
+			command=self._on_execute,
+		).pack(pady=8)
+
+		# ---------- Tableau des paramètres ----------
+		table_frame = ctk.CTkFrame(
+			root_frame,
+			fg_color="transparent",
+			border_color=COLOR_BORDER,
+			border_width=2,
+			corner_radius=12,
 		)
-		self.btn_run.pack(side="right")
+		table_frame.configure(width=CONTENT_WIDTH)
+		table_frame.grid(row=2, column=0, padx=16, pady=(4, 14), sticky="nsew")
+		table_frame.grid_columnconfigure(0, weight=1)
+		table_frame.grid_rowconfigure(1, weight=1)
 
-	# ==================== _activation_to_n_fct =========================
-	def _activation_to_n_fct(self) -> int:
-		"""Convertit le nom de la fonction d'activation en n_fct (1..4)."""
+		ctk.CTkLabel(
+			table_frame,
+			text="Tableau des paramètres",
+			text_color=COLOR_TEXT_TITLE,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+		).grid(row=0, column=0, pady=(6, 4))
 
-		mapping = {"sigmoïde": 1, "tan": 2, "tanh": 3, "gelu": 4}
-		return mapping.get(self.act_var.get(), 1)
+		self.table_box = ctk.CTkTextbox(
+			table_frame,
+			width=CONTENT_WIDTH - 28,
+			height=1,
+			fg_color=COLOR_ENTRY,
+			text_color=COLOR_TEXT,
+			border_color=COLOR_BORDER,
+			border_width=1,
+		)
+		self.table_box.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="nsew")
+		self.table_box.configure(state="disabled")
 
-	# ==================== get_config =========================
-	def get_config(self) -> None:
-		"""Charge une configuration depuis lab1/config.json et remplit les champs."""
+	# ==================== _add_radio =========================
+	def _add_radio(self, parent: ctk.CTkFrame, text: str) -> ctk.CTkRadioButton:
+		"""Crée un bouton radio pour le choix du mode (Généralisation/Validation/Apprentissage)."""
+		return ctk.CTkRadioButton(
+			parent,
+			text=text,
+			variable=self.mode_var,
+			value=text,
+			command=self._update_mode_label,
+			text_color=COLOR_TEXT,
+			fg_color=COLOR_ACCENT,
+			hover_color=COLOR_ACCENT_HOVER,
+		)
 
-		if not os.path.exists(_CONFIG_PATH):
+	# ==================== _add_field =========================
+	def _add_field(
+		self,
+		parent: ctk.CTkFrame,
+		label: str,
+		range_text: str,
+		row: int,
+		col: int,
+		key: str,
+		min_val: float,
+		max_val: float,
+		value_type: str,
+		show_range: bool = True,
+	) -> None:
+		"""Ajoute une cellule de la grille (label + entry + indication de plage).
+
+		- Enregistre l'entry dans `self.entries[key]`.
+		- Enregistre la contrainte (min/max/type) dans `self.constraints[key]`.
+		"""
+		cell = ctk.CTkFrame(parent, fg_color="transparent", width=CELL_W, height=CELL_H)
+		cell.grid(row=row, column=col, padx=6, pady=8, sticky="n")
+		cell.grid_propagate(False)
+
+		ctk.CTkLabel(
+			cell,
+			text=label,
+			text_color=COLOR_TEXT_MUTED,
+			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+		).pack(pady=(0, 6))
+
+		entry = ctk.CTkEntry(
+			cell,
+			width=ENTRY_W,
+			height=28,
+			fg_color=COLOR_ENTRY,
+			border_color=COLOR_BORDER,
+			text_color=COLOR_TEXT,
+		)
+		entry.pack()
+
+		if show_range and range_text:
+			ctk.CTkLabel(
+				cell,
+				text=range_text,
+				text_color=COLOR_TEXT_HINT,
+				font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+			).pack(pady=(4, 0))
+
+		self.entries[key] = entry
+		self.constraints[key] = (min_val, max_val, value_type)
+
+	# ==================== _update_mode_label =========================
+	def _update_mode_label(self) -> None:
+		"""Met à jour le texte "Mode sélectionné" selon le bouton radio choisi."""
+		self.mode_label.configure(text=f"Mode sélectionné : {self.mode_var.get()}")
+
+	# ==================== _on_get_config =========================
+	def _on_get_config(self) -> None:
+		"""Charge `config,json` et remplit les champs de l'interface."""
+		if not CONFIG_PATH.exists():
+			messagebox.showwarning("Config", f"Fichier introuvable: {CONFIG_PATH.name}")
 			return
-
 		try:
-			with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-				data = json.load(f)
-		except Exception:
+			data = json.loads(CONFIG_PATH.read_text(encoding="utf-8") or "{}")
+		except Exception as exc:
+			messagebox.showerror("Config", f"Config invalide: {exc}")
 			return
 
-		for key, field in self.fields.items():
+		show_missing: list[str] = []
+		for key, entry in self.entries.items():
 			if key in data:
-				field.set_value(str(data[key]))
+				entry.delete(0, "end")
+				entry.insert(0, str(data[key]))
+			else:
+				show_missing.append(key)
 
-		if "mode" in data:
-			self.mode_var.set(str(data["mode"]))
-			self._on_mode_change()
-		if "activation" in data:
-			self.act_var.set(str(data["activation"]))
+		mode = data.get("mode")
+		if isinstance(mode, str) and mode in {"Généralisation", "Validation", "Apprentissage"}:
+			self.mode_var.set(mode)
+			self._update_mode_label()
 
-	# ==================== set_config =========================
-	def set_config(self) -> None:
-		"""Sauvegarde les valeurs de l'UI dans lab1/config.json."""
+		act = data.get("activation")
+		if isinstance(act, str) and act in {"sigmoïde", "tan", "tanh", "gelu"}:
+			self.act_var.set(act)
 
-		data: Dict[str, object] = {
+		fichier = data.get("fichier")
+		if isinstance(fichier, str):
+			self.file_entry.delete(0, "end")
+			self.file_entry.insert(0, fichier)
+
+		# Pas de pop-up si tout va bien: on reste sobre.
+
+	# ==================== _on_set_config =========================
+	def _on_set_config(self) -> None:
+		"""Valide les champs puis sauvegarde la configuration dans `config,json`."""
+		try:
+			values = self._validate_entries()
+		except ValueError as exc:
+			messagebox.showerror("Erreur", str(exc))
+			return
+
+		data: dict[str, object] = {
 			"mode": self.mode_var.get(),
 			"activation": self.act_var.get(),
+			"fichier": self.file_entry.get().strip(),
+			**{k: v for k, v in values.items()},
 		}
-
-		for key, field in self.fields.items():
-			data[key] = field.get_value()
-
 		try:
-			with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-				json.dump(data, f, indent=2, ensure_ascii=False)
-		except Exception:
+			CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+		except Exception as exc:
+			messagebox.showerror("Config", f"Impossible d'écrire la config: {exc}")
+
+	# ==================== _choose_file =========================
+	def _choose_file(self) -> None:
+		"""Ouvre une boîte de dialogue et met le chemin choisi dans le champ fichier."""
+		path = filedialog.askopenfilename(title="Choisir un fichier")
+		if path:
+			self.file_entry.delete(0, "end")
+			self.file_entry.insert(0, path)
+
+	# ==================== _parse_value =========================
+	def _parse_value(self, key: str, raw: str) -> float | int:
+		"""Convertit une valeur texte en nombre et vérifie sa plage.
+
+		- Supporte la virgule comme séparateur décimal.
+		- Lève une erreur si vide ou hors limites.
+		"""
+		min_val, max_val, value_type = self.constraints[key]
+		text = raw.strip().replace(",", ".")
+		if not text:
+			raise ValueError("Champ vide")
+
+		if value_type == "int":
+			value = int(float(text))
+		else:
+			value = float(text)
+
+		if value < min_val or value > max_val:
+			raise ValueError(f"{min_val} à {max_val}")
+		return value
+
+	# ==================== _validate_entries =========================
+	def _validate_entries(self) -> dict[str, float | int]:
+		"""Valide tous les champs et retourne un dictionnaire de valeurs.
+
+		Vérifie aussi les contraintes croisées (min <= max) pour biais et poids.
+		"""
+		values: dict[str, float | int] = {}
+		for key, entry in self.entries.items():
+			try:
+				values[key] = self._parse_value(key, entry.get())
+			except Exception as exc:
+				raise ValueError(f"Valeur invalide pour {key} ({exc})") from exc
+
+		# Contraintes croisées (min <= max)
+		if float(values["biais_min"]) > float(values["biais_max"]):
+			raise ValueError("biais_min doit être ≤ biais_max")
+		if float(values["poids_min"]) > float(values["poids_max"]):
+			raise ValueError("poids_min doit être ≤ poids_max")
+		return values
+
+	# ==================== _update_table =========================
+	def _update_table(self, values: dict[str, float | int]) -> None:
+		"""Met à jour le tableau récapitulatif des paramètres (zone texte)."""
+		self.table_box.configure(state="normal")
+		self.table_box.delete("1.0", "end")
+		lines = [
+			f"Mode: {self.mode_var.get()}",
+			f"Fichier: {self.file_entry.get().strip() or '-'}",
+			f"Fonction: {self.act_var.get()}",
+			"",
+			f"Entrées: {values['nb_entrees']}",
+			f"Couches cachées: {values['nb_couches']}",
+			f"Neurones/couche: {values['nb_neurones']}",
+			f"Sorties: {values['nb_sorties']}",
+			f"Taux d'apprentissage: {values['taux_apprentissage']}",
+			f"Biais min/max: {values['biais_min']} / {values['biais_max']}",
+			f"Poids min/max: {values['poids_min']} / {values['poids_max']}",
+			f"i itérations: {values['iterations']}",
+			f"k époques: {values['k_epoques']}",
+			f"Score attendu: {values['score_attendu']}",
+			f"Score obtenu: {values['score_obtenu']}",
+		]
+		self.table_box.insert("1.0", "\n".join(lines))
+		self.table_box.configure(state="disabled")
+
+	# ==================== _on_execute =========================
+	def _on_execute(self) -> None:
+		"""Valide, met à jour le tableau, puis lance `c2p59.py`.
+
+		Les paramètres transmis au script:
+		- `N_FCT` : index de la fonction d'activation.
+		- `ETA`   : taux d'apprentissage.
+		"""
+		try:
+			values = self._validate_entries()
+		except ValueError as exc:
+			messagebox.showerror("Erreur", str(exc))
 			return
 
-	# ==================== execute =========================
-	def execute(self) -> None:
-		"""Action du bouton Exécuter.
+		self._update_table(values)
 
-		Version simple:
-			- lit quelques champs
-			- calcule un n_fct
-			- (à brancher) lance le code du projet
-		"""
+		act_map = {"sigmoïde": 1, "tan": 2, "tanh": 3, "gelu": 4}
+		n_fct = act_map.get(self.act_var.get(), 1)
+		eta = values.get("taux_apprentissage", 0.1)
 
-		# Import local pour éviter tout souci de chemin au démarrage.
-		# Le projet peut avoir le code dans learn.py ou dans projet1.py.
-		apprendre_une_iteration, generer_reseau_dynamique = _resolve_learning_api()
+		project_root = Path(__file__).resolve().parents[1]
+		script_path = project_root / "neurone" / "c2p59.py"
+		if not script_path.exists():
+			messagebox.showerror("Erreur", "c2p59.py introuvable")
+			return
 
-		nx = _safe_int(self.fields["nx"].get_value(), 5)
-		nc = _safe_int(self.fields["nc"].get_value(), 4)
-		nsc1 = _safe_int(self.fields["nsc1"].get_value(), 15)
-		nsc2 = _safe_int(self.fields["nsc2"].get_value(), 15)
-		ncs = _safe_int(self.fields["ncs"].get_value(), 10)
-		n_fct = self._activation_to_n_fct()
+		env = os.environ.copy()
+		env["N_FCT"] = str(n_fct)
+		env["ETA"] = str(eta)
 
-		# Marges (optionnelles)
-		b_margin = _try_float(self.fields["b_margin"].get_value())
-		w_margin = _try_float(self.fields["w_margin"].get_value())
-
-		# Interprétation simple des marges (cohérente avec les bornes par défaut de learn.py)
-		b_range = (1.0, 5.0) if b_margin is None else (1.0, float(max(1.0, b_margin)))
-		w_range = (-0.1, 0.1)
-		if w_margin is not None:
-			m = abs(float(w_margin))
-			w_range = (-m, m)
-
-		reseau = generer_reseau_dynamique(
-			nx=nx,
-			nc=nc,
-			nsc1=nsc1,
-			nsc2=nsc2,
-			ncs=ncs,
-			n_fct=n_fct,
-			b=b_range,
-			w=w_range,
-			eta=0.1,
-			seed=123,
-		)
-
-		_, _, y = apprendre_une_iteration(reseau)
-		score = _mse(reseau.vecD, y)
-
-		# Affichage du score obtenu
-		self.score_obtained.delete(0, "end")
-		self.score_obtained.insert(0, f"MSE(y,D)={score:.6g}")
-
-		# Si l'utilisateur a écrit un score attendu, on montre aussi l'écart
-		expected = _try_float(self.score_expected.get())
-		if expected is not None:
-			diff = float(score) - float(expected)
-			self.score_obtained.insert("end", f" ; Δ={diff:+.6g}")
+		try:
+			subprocess.Popen(
+				[sys.executable, str(script_path)],
+				cwd=str(project_root),
+				env=env,
+			)
+		except Exception as exc:
+			messagebox.showerror("Erreur", f"Impossible de lancer c2p59: {exc}")
 
 
-# ==================== main =========================
-def main() -> None:
-	"""Point d'entrée: lance l'interface."""
-
-	app = Projet1HMI()
-	app.mainloop()
-
-
+# ==================== Point d'entrée =========================
 if __name__ == "__main__":
-	main()
-
+	app = HMIApp()
+	app.mainloop()
