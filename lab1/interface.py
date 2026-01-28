@@ -21,23 +21,30 @@ import customtkinter as ctk
 
 
 # ========================
-# Couleurs (harmonisées, futuriste cyan)
+# Couleurs (inspirées de l'image: fond sombre + accent violet)
 # ========================
-COLOR_BG = "#0F1420"           # fond principal (navy profond)
-COLOR_PANEL = "#151D2B"        # panneaux
-COLOR_ENTRY = "#0D1320"        # champs / dropdown
-COLOR_BORDER = "#26344D"       # contours (bleu-gris)
+COLOR_BG = "#141418"            # fond principal (gris très sombre)
+COLOR_PANEL = "#1C1C22"         # panneaux
+COLOR_ENTRY = "#16161B"         # champs / dropdown
+COLOR_BORDER = "#2D2D36"        # contours
 
-# Hiérarchie typographique (nuances non-blanches)
-COLOR_TEXT_TITLE = "#CFF6FF"   # titres (cyan glacé)
-COLOR_TEXT = "#BFD6F2"         # texte principal (bleu clair)
-COLOR_TEXT_MUTED = "#8FA8C8"   # labels secondaires
-COLOR_TEXT_HINT = "#6F86A6"    # indications / plages / aides
+# Couleur de texte unifiée (à appliquer partout sauf boutons et radios)
+# NOTE: Mets ici le hex exact si tu veux une nuance différente.
+COLOR_TEXT_UNIFIED = "#DADAE6"
 
-# Accent (néon doux)
-COLOR_ACCENT = "#22D3EE"       # cyan
-COLOR_ACCENT_HOVER = "#06B6D4" # cyan plus dense
-COLOR_ON_ACCENT = "#071018"    # texte sur accent (très sombre)
+# Déclinaisons (conservées pour compatibilité dans le code)
+COLOR_TEXT_TITLE = COLOR_TEXT_UNIFIED
+COLOR_TEXT = COLOR_TEXT_UNIFIED
+COLOR_TEXT_MUTED = COLOR_TEXT_UNIFIED
+COLOR_TEXT_HINT = COLOR_TEXT_UNIFIED
+
+# Exceptions demandées: boutons et radios gardent leurs couleurs.
+COLOR_TEXT_RADIO = "#DADAE6"  # ancien COLOR_TEXT (avant unification)
+
+# Accent (violet)
+COLOR_ACCENT = "#7B6CFF"        # violet bouton
+COLOR_ACCENT_HOVER = "#6B5BF3"  # violet plus dense
+COLOR_ON_ACCENT = "#0C0C10"     # texte sur accent (presque noir)
 
 CONTENT_WIDTH = 700
 ENTRY_W = 90
@@ -71,6 +78,37 @@ def _enable_windows_dpi_awareness() -> None:
 FONT_FAMILY = "Segoe UI"
 
 
+# ========================
+# Typographie (harmonisée)
+# ========================
+FONT_TITLE: ctk.CTkFont | None = None
+FONT_SECTION: ctk.CTkFont | None = None
+FONT_LABEL: ctk.CTkFont | None = None
+FONT_HINT: ctk.CTkFont | None = None
+FONT_ENTRY: ctk.CTkFont | None = None
+FONT_BUTTON: ctk.CTkFont | None = None
+FONT_RADIO: ctk.CTkFont | None = None
+
+
+def _init_fonts() -> None:
+	"""Initialise les polices après création de la racine Tk.
+
+	Important: `ctk.CTkFont(...)` échoue si appelé avant la création de
+	la fenêtre (pas de default root). On initialise donc à la demande.
+	"""
+	global FONT_TITLE, FONT_SECTION, FONT_LABEL, FONT_HINT, FONT_ENTRY, FONT_BUTTON, FONT_RADIO
+	if FONT_TITLE is not None:
+		return
+
+	FONT_TITLE = ctk.CTkFont(family=FONT_FAMILY, size=18, weight="bold")
+	FONT_SECTION = ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold")
+	FONT_LABEL = ctk.CTkFont(family=FONT_FAMILY, size=12)
+	FONT_HINT = ctk.CTkFont(family=FONT_FAMILY, size=11)
+	FONT_ENTRY = ctk.CTkFont(family=FONT_FAMILY, size=12)
+	FONT_BUTTON = ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold")
+	FONT_RADIO = ctk.CTkFont(family=FONT_FAMILY, size=12)
+
+
 ctk.set_appearance_mode("Dark")
 _enable_windows_dpi_awareness()
 
@@ -85,6 +123,7 @@ class HMIApp(ctk.CTk):
 	def __init__(self) -> None:
 		"""Crée la fenêtre et construit tous les widgets."""
 		super().__init__()
+		_init_fonts()
 		self.title("HMI - Réseaux de neurones")
 		self.geometry("760x760")
 		self.minsize(760, 760)
@@ -127,7 +166,7 @@ class HMIApp(ctk.CTk):
 			header_frame,
 			text="Mode sélectionné : Généralisation",
 			text_color=COLOR_TEXT_TITLE,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=18, weight="bold"),
+			font=FONT_TITLE,
 		)
 		self.mode_label.pack(pady=(0, 10))
 
@@ -138,7 +177,7 @@ class HMIApp(ctk.CTk):
 			file_frame,
 			text="Fichier source",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="normal"),
+			font=FONT_LABEL,
 		).grid(row=0, column=0, columnspan=2, pady=(0, 6))
 
 		self.file_entry = ctk.CTkEntry(
@@ -148,6 +187,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		self.file_entry.grid(row=1, column=0, padx=(0, 8))
 
@@ -159,6 +199,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ACCENT,
 			hover_color=COLOR_ACCENT_HOVER,
 			text_color=COLOR_ON_ACCENT,
+			font=FONT_BUTTON,
 			command=self._choose_file,
 		).grid(row=1, column=1)
 
@@ -184,7 +225,7 @@ class HMIApp(ctk.CTk):
 			param_container,
 			text="Paramètres",
 			text_color=COLOR_TEXT_TITLE,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+			font=FONT_SECTION,
 		).grid(row=0, column=0, columnspan=2, pady=(10, 0))
 
 		# Ligne activation + scores (dans le panneau)
@@ -202,21 +243,21 @@ class HMIApp(ctk.CTk):
 			top_row,
 			text="Fonction act.",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=0, column=1, padx=10, pady=(0, 4))
 
 		ctk.CTkLabel(
 			top_row,
 			text="Score attendu",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=0, column=2, padx=10, pady=(0, 4))
 
 		ctk.CTkLabel(
 			top_row,
 			text="Score obtenu",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=0, column=3, padx=10, pady=(0, 4))
 
 		self.act_var = ctk.StringVar(value="sigmoïde")
@@ -231,6 +272,8 @@ class HMIApp(ctk.CTk):
 			dropdown_fg_color=COLOR_ENTRY,
 			dropdown_text_color=COLOR_TEXT,
 			dropdown_hover_color=COLOR_BORDER,
+			font=FONT_ENTRY,
+			dropdown_font=FONT_ENTRY,
 			width=ACT_W,
 			height=30,
 		)
@@ -243,6 +286,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		score_attendu.grid(row=1, column=2, padx=10)
 
@@ -253,6 +297,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		score_obtenu.grid(row=1, column=3, padx=10)
 
@@ -297,14 +342,14 @@ class HMIApp(ctk.CTk):
 			lower_grid,
 			text="min",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=0, column=0, padx=(0, 8), pady=(6, 2), sticky="w")
 
 		ctk.CTkLabel(
 			lower_grid,
 			text="max",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=1, column=0, padx=(0, 8), pady=(6, 2), sticky="w")
 
 		bias_min = ctk.CTkEntry(
@@ -314,6 +359,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		bias_min.grid(row=0, column=1, padx=(6, 10), pady=(4, 2), sticky="w")
 
@@ -324,6 +370,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		bias_max.grid(row=1, column=1, padx=(6, 10), pady=(4, 2), sticky="w")
 
@@ -334,6 +381,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		poids_min.grid(row=0, column=2, padx=(10, 10), pady=(4, 2), sticky="w")
 
@@ -344,6 +392,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		poids_max.grid(row=1, column=2, padx=(10, 10), pady=(4, 2), sticky="w")
 
@@ -351,7 +400,7 @@ class HMIApp(ctk.CTk):
 			lower_grid,
 			text="i itérations",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=0, column=3, padx=(12, 6), pady=(6, 2), sticky="e")
 
 		iter_entry = ctk.CTkEntry(
@@ -361,6 +410,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		iter_entry.grid(row=0, column=4, padx=(0, 6), pady=(4, 2), sticky="w")
 
@@ -368,7 +418,7 @@ class HMIApp(ctk.CTk):
 			lower_grid,
 			text="k époques",
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).grid(row=1, column=3, padx=(12, 6), pady=(6, 2), sticky="e")
 
 		epoch_entry = ctk.CTkEntry(
@@ -378,6 +428,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		epoch_entry.grid(row=1, column=4, padx=(0, 6), pady=(4, 2), sticky="w")
 
@@ -385,14 +436,14 @@ class HMIApp(ctk.CTk):
 			lower_grid,
 			text="1 ≤ biais ≤ 5",
 			text_color=COLOR_TEXT_HINT,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+			font=FONT_HINT,
 		).grid(row=2, column=1, padx=(6, 0), pady=(4, 0), sticky="w")
 
 		ctk.CTkLabel(
 			lower_grid,
 			text="-0.1 ≤ Wn ≤ 0.1",
 			text_color=COLOR_TEXT_HINT,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+			font=FONT_HINT,
 		).grid(row=2, column=2, padx=(10, 0), pady=(4, 0), sticky="w")
 
 		self.entries["biais_min"] = bias_min
@@ -420,6 +471,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ACCENT,
 			hover_color=COLOR_ACCENT_HOVER,
 			text_color=COLOR_ON_ACCENT,
+			font=FONT_BUTTON,
 			command=self._on_get_config,
 		).pack(pady=(8, 8))
 
@@ -431,6 +483,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ACCENT,
 			hover_color=COLOR_ACCENT_HOVER,
 			text_color=COLOR_ON_ACCENT,
+			font=FONT_BUTTON,
 			command=self._on_set_config,
 		).pack(pady=8)
 
@@ -442,6 +495,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ACCENT,
 			hover_color=COLOR_ACCENT_HOVER,
 			text_color=COLOR_ON_ACCENT,
+			font=FONT_BUTTON,
 			command=self._on_execute,
 		).pack(pady=8)
 
@@ -462,7 +516,7 @@ class HMIApp(ctk.CTk):
 			table_frame,
 			text="Tableau des paramètres",
 			text_color=COLOR_TEXT_TITLE,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+			font=FONT_SECTION,
 		).grid(row=0, column=0, pady=(6, 4))
 
 		self.table_box = ctk.CTkTextbox(
@@ -471,6 +525,7 @@ class HMIApp(ctk.CTk):
 			height=1,
 			fg_color=COLOR_ENTRY,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 			border_color=COLOR_BORDER,
 			border_width=1,
 		)
@@ -486,9 +541,10 @@ class HMIApp(ctk.CTk):
 			variable=self.mode_var,
 			value=text,
 			command=self._update_mode_label,
-			text_color=COLOR_TEXT,
+			text_color=COLOR_TEXT_RADIO,
 			fg_color=COLOR_ACCENT,
 			hover_color=COLOR_ACCENT_HOVER,
+			font=FONT_RADIO,
 		)
 
 	# ==================== _add_field =========================
@@ -518,7 +574,7 @@ class HMIApp(ctk.CTk):
 			cell,
 			text=label,
 			text_color=COLOR_TEXT_MUTED,
-			font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+			font=FONT_LABEL,
 		).pack(pady=(0, 6))
 
 		entry = ctk.CTkEntry(
@@ -528,6 +584,7 @@ class HMIApp(ctk.CTk):
 			fg_color=COLOR_ENTRY,
 			border_color=COLOR_BORDER,
 			text_color=COLOR_TEXT,
+			font=FONT_ENTRY,
 		)
 		entry.pack()
 
@@ -536,7 +593,7 @@ class HMIApp(ctk.CTk):
 				cell,
 				text=range_text,
 				text_color=COLOR_TEXT_HINT,
-				font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+				font=FONT_HINT,
 			).pack(pady=(4, 0))
 
 		self.entries[key] = entry
