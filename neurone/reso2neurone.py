@@ -1117,14 +1117,18 @@ class backpp:
 			inp_name = "X" if layer_index == 1 else f"a{layer_index - 1}"
 			inp_vec = X if layer_index == 1 else a_list[layer_index - 2]
 			self._print_step(f"Forward couche {layer_index}")
-			print(
-				f"i{layer_index} = {inp_name}@W{layer_index} + b{layer_index} = {self._fmt_vec(z, precision)}"
-			)
 
 			# Détail terme-à-terme (utile quand les dimensions sont petites)
 			n_in = len(W)
 			n_out = len(W[0]) if W else 0
-			if n_in <= 3 and n_out <= 3 and len(inp_vec) <= 3 and len(b) <= 3:
+			show_terms = n_in <= 3 and n_out <= 3 and len(inp_vec) <= 3 and len(b) <= 3
+			if show_terms:
+				print(f"i{layer_index} = {inp_name}@W{layer_index} + b{layer_index}")
+			else:
+				print(
+					f"i{layer_index} = {inp_name}@W{layer_index} + b{layer_index} = {self._fmt_vec(z, precision)}"
+				)
+			if show_terms:
 				for j in range(n_out):
 					# forme symbolique + forme numérique
 					sym_terms = []
@@ -1143,18 +1147,22 @@ class backpp:
 						+ f" + {self._fmt(b[j], precision)} = {self._fmt(z[j], precision)}"
 					)
 
-			print(f"a{layer_index} = Fi(i{layer_index}) = {self._fmt_vec(a, precision)}")
 			if len(a) <= 3:
+				print(f"a{layer_index} = Fi(i{layer_index})")
 				for j in range(len(a)):
 					print(
 						f"  a{j + 1}_{layer_index} = Fi(i{j + 1}_{layer_index}) = {self._fmt(a[j], precision)}"
 					)
-			print(f"fp{layer_index} = Fp(i{layer_index}) = {self._fmt_vec(fp, precision)}")
+			else:
+				print(f"a{layer_index} = Fi(i{layer_index}) = {self._fmt_vec(a, precision)}")
 			if len(fp) <= 3:
+				print(f"fp{layer_index} = Fp(i{layer_index})")
 				for j in range(len(fp)):
 					print(
 						f"  fp{j + 1}_{layer_index} = Fp(i{j + 1}_{layer_index}) = {self._fmt(fp[j], precision)}"
 					)
+			else:
+				print(f"fp{layer_index} = Fp(i{layer_index}) = {self._fmt_vec(fp, precision)}")
 
 		self._print_step("Sortie")
 		L = len(a_list)
@@ -1170,16 +1178,18 @@ class backpp:
 		self._print_step("Deltas")
 		L = len(delta_list)
 		d_minus_y = [float(d_list[i]) - float(y[i]) for i in range(len(y))]
-		print(
-			f"delta{L} = (d - y) ⊙ fp{L} = {self._fmt_vec(delta_list[-1], precision)}"
-		)
 		if len(delta_list[-1]) <= 3:
+			print(f"delta{L} = (d - y) ⊙ fp{L}")
 			for j in range(len(delta_list[-1])):
 				print(
 					f"  delta{j + 1}_{L} = (d{j + 1} - y{j + 1})*fp{j + 1}_{L} = "
 					f"({self._fmt(d_list[j], precision)} - {self._fmt(y[j], precision)})*{self._fmt(fp_list[-1][j], precision)} = "
 					f"{self._fmt(d_minus_y[j], precision)}*{self._fmt(fp_list[-1][j], precision)} = {self._fmt(delta_list[-1][j], precision)}"
 				)
+		else:
+			print(
+				f"delta{L} = (d - y) ⊙ fp{L} = {self._fmt_vec(delta_list[-1], precision)}"
+			)
 		for layer_index in range(L - 1, 0, -1):
 			W_next = w_list[layer_index]  # W_{layer_index+1} (0-based)
 			delta_next = delta_list[layer_index]
@@ -1195,12 +1205,16 @@ class backpp:
 			# Stocke err pour le résumé (err{layer_index})
 			err_list[layer_index - 1] = err_prev
 
-			print(
-				f"err{layer_index} = W{layer_index + 1} @ delta{layer_index + 1} = {self._fmt_vec(err_prev, precision)}"
-			)
-
 			# Détail terme-à-terme (utile quand les dimensions sont petites)
-			if len(W_next) <= 3 and (len(W_next[0]) if W_next else 0) <= 3 and len(delta_next) <= 3:
+			show_err_terms = len(W_next) <= 3 and (len(W_next[0]) if W_next else 0) <= 3 and len(delta_next) <= 3
+			if show_err_terms:
+				print(f"err{layer_index} = W{layer_index + 1} @ delta{layer_index + 1}")
+			else:
+				print(
+					f"err{layer_index} = W{layer_index + 1} @ delta{layer_index + 1} = {self._fmt_vec(err_prev, precision)}"
+				)
+
+			if show_err_terms:
 				for k in range(len(W_next)):
 					row = W_next[k]
 					sym_terms = []
@@ -1218,15 +1232,17 @@ class backpp:
 						+ f" = {self._fmt(err_prev[k], precision)}"
 					)
 
-			print(
-				f"delta{layer_index} = err{layer_index} ⊙ fp{layer_index} = {self._fmt_vec(delta_list[layer_index - 1], precision)}"
-			)
 			if len(delta_list[layer_index - 1]) <= 3:
+				print(f"delta{layer_index} = err{layer_index} ⊙ fp{layer_index}")
 				for j in range(len(delta_list[layer_index - 1])):
 					print(
 						f"  delta{j + 1}_{layer_index} = err{j + 1}_{layer_index}*fp{j + 1}_{layer_index} = "
 						f"{self._fmt(err_prev[j], precision)}*{self._fmt(fp_list[layer_index - 1][j], precision)} = {self._fmt(delta_list[layer_index - 1][j], precision)}"
 					)
+			else:
+				print(
+					f"delta{layer_index} = err{layer_index} ⊙ fp{layer_index} = {self._fmt_vec(delta_list[layer_index - 1], precision)}"
+				)
 
 		# Correcteurs
 		self._print_step("Correcteurs")

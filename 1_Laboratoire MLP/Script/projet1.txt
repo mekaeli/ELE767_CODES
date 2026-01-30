@@ -1,0 +1,51 @@
+Pour ameliorer la lisibilite (dans tout le projet), Tu dois separer toutes les focntion par
+# ==================== nom de la fonction suivante =========================
+commenter les fonction dans un francais simple et explicite	
+
+Dans le repertoire lab1/learn.py, ecris une fonction dynamique qui:
+	peut resoudre n'importe quelle systeme en connaisant
+		nx:nombre d'entree (par defaut 5)
+		nc:nombre de couche y comprris la sorties (par defaut 4)
+		nsc1:nombre de neurones dans la couche1 (par defaut 15)
+		nsc2:nombre de neurones dans la couche2 (par defaut 15)
+		ncs:nombre de neurones dans la couche de sortie (par defaut 10)
+		n_else: nc-2
+		c_else: n_else*ncs
+		n_fct:numero de fonction d'activation (par defaut 1)
+		b:matrice qui contient la valeur min et le max que peut prendre les biais (par defaut 1 5)
+		w:matrice qui contient la valeur min et le max que peut prendre les poids (par defaut -0.1 0.1)
+			
+	les autres couches ont le meme nombre de neurones que la couche de sortie ncs
+	Tu dois genere 
+		le vecX qui contient toutes les sortie a partir de nx
+			valeur par defaut aleatoir 0 ou 1
+		le vecW qui contient toutes les poids a partir de nc,nsc1,nsc2,ncs 
+			valeur par defaut aleatoir dans w
+		le vecB qui contient toutes les biais a partir de nc
+			valeur par defaut aleatoir dans b
+		le vecD qui contient toutes les sortie a partir de ncs
+			valeur par defaut aleatoir 0 ou 1
+	Toutes les varibles génére doit etre explicite et identifiable selon numero de couche/numero de neurone
+	tu dois utiliser l,approche matricielle et les fonction de backpp_neurone_mat.py
+	
+Pour ameliorer la lisibilite (dans tout le projet), Tu dois separer toutes les focntion par
+# ==================== nom de la fonction suivante =========================
+commenter les fonction dans un francais simple et explicite		
+
+
+ 
+Affiche uniquement le couple poi
+
+Ajouter une session resume apres les l,affichage des calcul comme suit
+	tous les activation
+	tous les fonction d'activation et leur derivée
+	tous les signaux d'erreur
+	tous les facteurs de correction
+	toutes les mises a jour
+	
+Les matrices doivent etre affiche correctement (lign/colonne)
+
+
+Fais un verification de correspondance entre  les sorties
+	c2p59_alg.py et c2p59_mat.py
+	c2p69_alg.py et c2p69_mat.py

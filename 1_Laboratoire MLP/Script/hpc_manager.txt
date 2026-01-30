@@ -1,0 +1,559 @@
+================================================================================================================================
+
+tu dois analyser le code complet en profondeur pour integre sans compromettre les fonction deja acquise.
+
+Je veux une solution robuste et fiable respectant l'integrité de la base de données
+
+Ne pas toucher la logique de filtre auto/manuel
+
+	initialement ou quand non connecté:
+		- Tu dois initialiser tous les radiosboutons d'action
+		- Tu dois inhiber tous les radiosboutons d'action
+		- tu dois initialiser les 11 cases
+		- tu dois inhiber les 11 cases
+		- un clic dans le tableau ne doit pas remplir les cases (un message invitant a se connecter)
+	
+	quand etat different de non connecté:
+	
+		si tous les radio des actions sont inactif:
+			- tu dois initialiser les 11 cases
+			- tu dois inhiber les 11 cases
+			- un clic dans le tableau ne doit pas remplir les cases (un message invitant a choisir une action au prealable)
+	
+	quand etat connecté:
+
+		si connection utilisateur
+		
+			- tu dois désinhiber les radiosboutons d'action suivants ( Modifier, Permuter, Inspecter)
+			- tu dois inhiber les radiosboutons d'action suivants ( Ajouter, Supprimer)
+			
+		si connection admin	
+		
+			- tu dois désinhiber tous les radiosboutons d'action 
+	
+		si tous les radio des actions sont inactif:
+		
+			- tu dois initialiser les 11 cases
+			- tu dois inhiber les 11 cases
+			- un clic dans le tableau ne doit pas remplir les cases (un message invitant a choisir une action au prealable)
+
+		Si radio actif = Ajouter
+			
+			- tu dois désinhiber toutes les cases 
+			- le tableau doit etre configuré a la selection unique de ligne
+			- un clic dans le tableau doit  remplir les cases correspondante avec la ligne selectionné
+		
+		Si radio actif = Permuter
+			
+			- tu dois inhiber les 11 cases
+			- le tableau doit etre configuré a la selection multiligne (maximum 2 lignes)
+			- un clic dans le tableau ne doit pas remplir les cases
+			
+		Si radio actif = Inspecter
+
+			- tu dois inhiber les 11 cases
+			- le tableau doit etre configuré a la selection multiligne (il ne doit pas y avoir une limite de ligne)
+			- un clic dans le tableau ne doit pas remplir les cases
+
+		Si radio actif = Supprimer
+			
+			- tu dois inhiber toutes les cases 
+			- le tableau doit etre configuré a la selection unique de ligne
+			- un clic dans le tableau doit  remplir les cases correspondante avec la ligne selectionné
+			
+		- Si radio actif = Modifier
+			
+			- le tableau doit etre configuré a la selection unique de ligne
+			- un clic dans le tableau doit  remplir les cases correspondante avec la ligne selectionné
+			- si connection Utilisateur
+				- tu dois inhibe uniquement les cases No de serie et code sti, les autres cases doivent etre désinhibe
+			- sinon 
+				- tu dois désinhiber les 11 cases
+				
+		si radio actif = modifier ou Ajouter:
+		
+			si valeur de case Station != Hors Exploitation:
+				- la valeur de la case Armoire SACL = table parametre colonne2 a la meme ligne
+				- case Armoire SACL inhibé
+				- case État du HPC inhibé 
+				
+			si valeur de case Station = Hors Exploitation
+				- initialiser case Armoire SACL
+				- la liste de la case Armoire SACL = table parametre colonne4
+				- valeur par defaut de la case Armoire SACL = table parametre colonne4, element 1 de la liste
+				- case Armoire SACL désinhibé
+				
+===================================================================================================================
+	
+tu dois analyser le code complet en profondeur pour integre sans compromettre les fonction deja acquise.
+
+Je veux une solution robuste et fiable respectant l'integrité de la base de données
+
+un Clic sur le bouton validé doit declencher une des actions selon le cas
+
+	Si aucune connection:
+		- message indique q'une connection est requise
+		
+	Si aucun radio bouton selectionné:
+		- message indique qu'aucun bouton selectionné
+		
+	Si une case vides (s'applique uniquement pour les radios Ajouter et Modifier):
+		- Message d'erreur et on arrete 
+	
+	si aucun des cas precedent:
+	
+		- un message demande de confirmer action
+		
+		si action refusé:
+			- ne rien faire
+			
+		si action accepté, excecuter l'action selon les regles suivantes:
+		
+			Si radio Modifier:
+			
+				- s'assurer que la ligne existe dans la table BDD (compare l'une des deux premieres colonnes) - cette verification ne'applique pas a admin
+					- sinon, Message d'erreur et on arrete 
+
+				- les différences entre les valeurs de la cases et celui dans la ligne correspondande sont reporter en [Modifier + texte]
+				- le code doit prendre les valeurs de chaque case pour mettre a jour la ligne correspondande dans la table BDD
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 
+					- colonne2 = case du meme nom que l'en-tete colonne2
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Modifier + texte]
+					- colonne5 = date aujourd'hui
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur
+					
+			Si radio Ajouter:
+			
+				- s'assurer que les cases No de série ou Code Sti n'existe pas dans la table BDD (correspondance avec les deux premieres colonnes)
+					- si oui, Message d'erreur indiquand la valeur du doublon et on arrete 
+				
+				- les deux premieres colonnes sont reporter en [Ajouter + texte]
+				- Inserer une ligne a la fin de la table BDD
+				- le code doit prendre les valeurs de chaque case pour mettre a jour la ligne inserer dans la table BDD
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 
+					- colonne2 = case du meme nom que l'en-tete colonne2
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Ajouter + texte]
+					- colonne5 = date aujourd'hui
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur			
+			
+			
+			Si radio Supprimer:
+
+				- s'assurer que la ligne existe dans la table BDD (compare l'une des deux premieres colonnes)
+					- sinon, Message d'erreur et on arrete 
+			
+				- les deux premieres colonnes sont reporter en [Supprimer + texte]
+				- le code doit supprimer la ligne correspondante dans la table BDD
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 
+					- colonne2 = case du meme nom que l'en-tete colonne2
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Supprimer + texte]
+					- colonne5 = date aujourd'hui
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur	
+			
+			Si radio Permuter:
+			
+				- les deux premieres colonnes (premiere ligne selectionnée) sont reporter en A=[texte]
+				- les deux premieres colonnes (seconde ligne selectionnée) sont reporter en B=[texte]
+				
+				- dans la BD, il faut permuter les valeur des colonnes 6 (index5) entre elles
+				- dans la BD, il faut permuter les valeur des colonnes 7 (index6) entre elles
+				
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 ligne1 selectionnée
+					- colonne2 = case du meme nom que l'en-tete colonne2 ligne1 selectionnée
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Permuter avec B]
+					- colonne5 = date aujourd'hui
+					
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 ligne2 selectionnée
+					- colonne2 = case du meme nom que l'en-tete colonne2 ligne2 selectionnée
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Permuter avec A]
+					- colonne5 = date aujourd'hui					
+									
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur	
+
+					
+			Si radio Inspecter, avenir...
+			
+				- garder le code actuel
+
+======================================================================================================================================
+			
+J'ai modifier l'algorithme (Si radio Inspecter)
+	
+tu dois analyser le code complet en profondeur pour integre sans compromettre les fonction deja acquise.
+
+Je veux une solution robuste et fiable respectant l'integrité de la base de données
+
+un Clic sur le bouton validé doit declencher une des actions selon le cas
+
+	Si aucune connection:
+		- message indique q'une connection est requise
+		
+	Si aucun radio bouton selectionné:
+		- message indique qu'aucun bouton selectionné
+		
+	Si une case vides (s'applique uniquement pour les radios Ajouter et Modifier):
+		- Message d'erreur et on arrete 
+	
+	si aucun des cas precedent:
+	
+		- un message demande de confirmer action
+		
+		si action refusé:
+			- ne rien faire
+			
+		si action accepté, excecuter l'action selon les regles suivantes:
+		
+			Si radio Modifier:
+			
+				- s'assurer que la ligne existe dans la table BDD (compare l'une des deux premieres colonnes) - cette verification ne'applique pas a admin
+					- sinon, Message d'erreur et on arrete 
+
+				- les différences entre les valeurs de la cases et celui dans la ligne correspondande sont reporter en [Modifier + texte]
+				- le code doit prendre les valeurs de chaque case pour mettre a jour la ligne correspondande dans la table BDD
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 
+					- colonne2 = case du meme nom que l'en-tete colonne2
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Modifier + texte]
+					- colonne5 = date aujourd'hui
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur
+					
+			Si radio Ajouter:
+			
+				- s'assurer que les cases No de série ou Code Sti n'existe pas dans la table BDD (correspondance avec les deux premieres colonnes)
+					- si oui, Message d'erreur indiquand la valeur du doublon et on arrete 
+				
+				- les deux premieres colonnes sont reporter en [Ajouter + texte]
+				- Inserer une ligne a la fin de la table BDD
+				- le code doit prendre les valeurs de chaque case pour mettre a jour la ligne inserer dans la table BDD
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 
+					- colonne2 = case du meme nom que l'en-tete colonne2
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Ajouter + texte]
+					- colonne5 = date aujourd'hui
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur			
+			
+			
+			Si radio Supprimer:
+
+				- s'assurer que la ligne existe dans la table BDD (compare l'une des deux premieres colonnes)
+					- sinon, Message d'erreur et on arrete 
+			
+				- les deux premieres colonnes sont reporter en [Supprimer + texte]
+				- le code doit supprimer la ligne correspondante dans la table BDD
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 
+					- colonne2 = case du meme nom que l'en-tete colonne2
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Supprimer + texte]
+					- colonne5 = date aujourd'hui
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur	
+			
+			Si radio Permuter:
+			
+				- les deux premieres colonnes (premiere ligne selectionnée) sont reporter en A=[texte]
+				- les deux premieres colonnes (seconde ligne selectionnée) sont reporter en B=[texte]
+				
+				- dans la BD, il faut permuter les valeur des colonnes 6 (index5) entre elles
+				- dans la BD, il faut permuter les valeur des colonnes 7 (index6) entre elles
+				
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 ligne1 selectionnée
+					- colonne2 = case du meme nom que l'en-tete colonne2 ligne1 selectionnée
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Permuter avec B]
+					- colonne5 = date aujourd'hui
+					
+				- le code doit declenche une fonction du module page_history.py qui doit inserer une ligne dans la table Historiques et la remplir:
+					- colonne1 = case du meme nom que l'en-tete colonne1 ligne2 selectionnée
+					- colonne2 = case du meme nom que l'en-tete colonne2 ligne2 selectionnée
+					- colonne3 = id windows, prevenant de app.py
+					- colonne4 = [Permuter avec A]
+					- colonne5 = date aujourd'hui					
+									
+				- mettre a jour le tableau de la page Historiques
+				- mettre a jour le tableau de la page base de donnees
+				- si le processus reussis, un message de confirmation
+				- sinon:
+					- s'assurer que les tables restent dans leur etats avant action
+					- renvoyer un message d'erreur	
+
+					
+			Si radio Inspecter:
+			
+			
+				- valiser qu'au moins une ligne est selestionné dans le tableau, sinon message
+				- si oui
+				
+					- tu dois implementer implementé le module inspecteur.py pour :
+						
+						- si var_ran =  false
+						
+							- message invitant l'utilisateur a choisir un Rapport Ansible
+							- Tu dois ouvrir un explorateur de fichier qui permet de choisir ce fichier
+							- tu dois ouvrir le fichier et confirmer que la premiere ligne contient "ip","mac","vlan"
+							- Sinon, message indiquant fichier non conforme 
+							- si oui, creer un array_ran de taille dynamique
+							
+								- tu dois lire chaque ligne du fichier et le extraire les valeurs "ip","mac","vlan"
+								- la premiere ligne est l'en-tete et chaque colonne est separé par une ,
+								- les autres lignes sont les données sous le meme format que l'en-tete
+								
+								- tu dois stocker l'en-tete et les données dans le array de taille dynamique
+								- tu dois fermer le fichier
+								- si l'extrction reussi, mettre var_ran = true
+								- Tu dois affiche le array dans la console
+								- sinon var_ran = false et message erreur d'extraction du rapport ancible
+								
+						- si var_app =  false	
+
+							- message invitant l'utilisateur a choisir un all_applib
+							- Tu dois ouvrir un explorateur de fichier qui permet de choisir ce fichier
+							- tu dois ouvrir le fichier et valider que l'onglet RTU existe.
+							- tu dois valider que la premiere ligne (en-tete) contient les colonnes IPAddress et ApplicationName
+							- Sinon, message indiquant fichier non conforme 
+							- si oui, creer un array_app de taille dynamique
+							
+								- la premiere ligne est l'en-tete 
+								- les autres lignes sont les données
+								
+								- tu dois uniquement extraire les colonnes IPAddress et ApplicationName
+								- tu dois stocker l'en-tete et les données dans le array de taille dynamique
+								- tu dois fermer le fichier
+								- si l'extrction reussi, mettre var_app = true
+								- Tu dois affiche le array dans la console
+								- sinon var_ran = false et message erreur d'extraction du rapport ancible					
+					
+					Pour chaque ligne selectionneée 
+					
+						- tu dois creer une structure de données A qui contient les 7 premeire colonnnes
+						- tu dois creer une structure de données B dont les champs sont ip1, ip2, mac1, vlan1, mac2, vlan2, station1, armoire1, station2, armoire2. 
+						- les valeurs de B sont determinées come suit:
+						
+							- recherche A.MAC-MB1  dans var_ran
+								- B.ip1 = var_ran.ip
+								- B.mac1 = var_ran.mac
+								- B.vlan1 = var_ran.vlan
+								
+							- recherche A.MAC-MB2  dans var_ran
+								- B.ip2 = var_ran.ip
+								- B.mac2 = var_ran.mac
+								- B.vlan2 = var_ran.vlan
+
+							- recherche B.ip1 dans var_app
+								- B.station1 = var_ran.ApplicationName
+								
+							- recherche B.ip2 dans var_app
+								- B.station2 = var_ran.ApplicationName
+								
+							- recherche B.station1 dans table parametres.Station
+								- B.armoire1 = table_parametres.Armoire SACL
+								
+							- recherche B.station2 dans table_parametres.Station
+								- B.armoire2 = table_parametres.Armoire SACL
+						
+						- Tu dois valider qu'aucun champs n'est vide, sinon lever une alerte
+						
+						- Tu dois afficher B dans la console 
+						
+						- Tu dois produire un rapport sous le format suivante
+							- hpc inspecté :
+								[colonne1]
+								[colonne2]
+								[colonne3]
+							
+							- Correspondonce MAC-MB1 :
+								- si B.vlan1 = 46 ou 45
+								[B.mac1] - ok (avec un petit crochet vert)
+								- sinon 
+								[B.mac1] - not ok (avec un petit croix rouge)
+
+							- Correspondonce MAC-MB2 :
+								- si B.vlan2 = 32
+								[B.mac2] - ok (avec un petit crochet vert)
+								- sinon 
+								[B.mac2] - not ok (avec un petit croix rouge)
+								
+								- Correspondonce MAC-MB1 et Correspondonce MAC-MB2 doivent etre disposés en ligne
+									- Correspondonce MAC-MB1 en colonne 1
+									- Correspondonce MAC-MB1 en colonne 2
+							
+							- Correspondonce Station :	
+								- si B.station1 = B.station2 
+									[B.mac1, B.station1] - ok (avec un petit crochet vert)
+									[B.mac2, B.station2] - ok (avec un petit crochet vert)
+									MAC-MB1 et MAC-MB2 sont dans la meme station (avec un petit crochet vert)
+									- si A.Station = B.station1
+										- code lieu actuelle [station] - ok (avec un petit crochet vert)
+									- sinon
+										- code lieu actuelle [A.station] - not ok (avec un petit croix rouge)
+										- nouveau code lieu  [B.station1] (avec un petit crochet vert)
+										
+									- goto Correspondonce Armoire
+								
+								- sinon 
+									[B.mac1, B.station1] - not ok (avec un petit croix rouge)
+									[B.mac2, B.station2] - not ok (avec un petit croix rouge)
+									MAC-MB1 et MAC-MB2 ne sont pas dans la meme station (avec un petit croix rouge)
+									
+									- Pour [B.mac1]
+										- si A.Station = B.station1
+											- code lieu actuelle [A.station] - ok (avec un petit crochet vert)
+										- sinon
+											- code lieu actuelle [A.station] - not ok (avec un petit croix rouge)
+											- nouveau code lieu  [B.station1] (avec un petit crochet vert)								
+									
+									- Pour [B.mac2]
+										- si A.Station = B.station2
+											- code lieu actuelle [A.station] - ok (avec un petit crochet vert)
+										- sinon
+											- code lieu actuelle [A.station] - not ok (avec un petit croix rouge)
+											- nouveau code lieu  [B.station2] (avec un petit crochet vert)
+											
+									- fin
+
+							- Correspondonce Armoire :
+								- la correspondance Code lieu/Armoire est imposée dans la table Paramètres
+							
+						- Le rapport final de toute les lignes doivent etre affiché sur un seul et meme pop up style page
+						- Tu dois utiliser des couleurs armonieuses et coherente pour distinguer chaque session
+						- les crochets et croix doivent avoir la couleur demandée
+						- Les sous titre doivemt avoir une couleur distinct et lisible
+						- le rapport doit etre lisible et facilement comprehensible a un humain
+									
+				sinon, message pour indiquer qu'au moins une ligne requis pour faire l'analyse
+
+=================================================================================================================
+
+tu dois analyser le code complet en profondeur pour integre sans compromettre les fonction deja acquise.
+Je veux une solution robuste et fiable respectant l'integrité de la base de données
+Sur la page parametres
+	Apres le frame de titre
+	Ajouter une session gestionnaire BDD
+		- doit contenir des boutons suivants:
+			- verouiller bdd
+				- doit permettre de se connecter a hpc_database.db s'il ne l'ai pas deja
+				- doit permettre de changer les attributs de hpc_database.db de sorte que seul un admin peut le supprimer
+				- La modification doit etre possible et libre pour tous y compris pour le programme.
+				
+			- déverouiller bdd
+				- doit permettre de changer les attributs de hpc_database.db de sorte qu il soit modifiable et supprimable pour tous
+				- permettre de se deconnecter a hpc_database.db s'il existe
+				
+			- bdd vers Excel
+				- doit permettre d'exporter la bdd en un ficheier excel hpc_tableur.xlsx
+				- si le fichier existe deja,
+					- il doit etre deplace dans Archives et renomme hpc_tableur_auhoudhui
+							
+			- Excel vers bdd
+				- Apres un message pop up de confirmation,
+				- si le fichier excel hpc_tableur.xlsx existe et contient des donnees,
+					- On doit enregistrer la bdd actuelle dans Archives et le renommer hpc_database_aujoudhui
+					- On doit faire un nouveau chargement vers la bdd et hpc_database.db doit etre mise a jour
+			
+		- l'interface doit etre moderne, et coherente avec tout le reste
+		
+		- Au demarrage/fermeture,
+			- aucune commande de verrrouillage ou de deverouillage ne doit etre applique sur hpc_database.db
+			- hpc_database.db garde son attribut
+
+=================================================================================================================
+
+analyse tout le code.
+Optimise pour atteintre les obejectifs suivants:
+	les graphiques et les les tableaux ne doivent pas etre construits sous les yeux de l'utiisateur
+	pas de latence lors de navigation entre les pages
+	La fenetre principale souvre le plus rapidement possible au demarage
+	Aucune fonctionnalité actuel ne doit etre degradé
+	
+
+=================================================================================================================			
+produit projet.md quid doit contenir
+
+	Nom du projet
+	Présentation (objectifs)
+	Sommaire	
+	Prérequis + requirements
+	Technologies utilisées
+	Installer les dépendances
+	architecture (role de chaque Fichiers)
+	Achitecture des echanges et dependances
+	Flux de données
+	Contenu des pages
+	explication detailles des fonctionnalités
+	Filtre auto/manuel
+	Comportement des boutons
+	Gestion de la connection
+	Les actions
+	Tous autres information pertinentes
+	Prérequis
+	Installer les dépendances
+	Technologies utilisées
+	
+
+=================================================================================================================			
+Refais le README.md
+
+	Nom du projet
+	Présentation (objectifs)
+	
+
+	Achitecture des echanges et dependances
+	Flux de données
+	Contenu des pages
+	explication detailles des fonctionnalités
+	Filtre auto/manuel
+	Comportement des boutons
+	Les actions
+
+Analyse tout le projet 
+	- verifie si le module tests contient tous ce qu'il faut pour tester les fonctions elementaires du programme (sinon tu le rajoute et tu mets a jour All_test)
+	- Met a jour le README.md en gardant le format et le type de contenu actuelle
+	- Met a jour le projet.md en gardant le format et le type de contenu actuelle
+Assure toi que toutes les parties importantes du code soit commentées en francais, selon les normes en programation

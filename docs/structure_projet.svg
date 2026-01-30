@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720">
+  <defs>
+    <style>
+      .box { fill: #ffffff; stroke: #111827; stroke-width: 2; }
+      .title { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .text { font: 14px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 13px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .muted { fill: #374151; }
+      .hl { fill: #fde047; stroke: #111827; stroke-width: 1.5; }
+      .hl2 { fill: #bbf7d0; stroke: #111827; stroke-width: 1.5; }
+      .note { fill: #ffffff; stroke: #111827; stroke-width: 1.5; }
+      .arrow { stroke: #111827; stroke-width: 2; fill: none; }
+    </style>
+
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111827"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="1600" height="720" fill="#ffffff"/>
+
+  <!-- Left column boxes -->
+  <!-- reseau -->
+  <rect class="box" x="40" y="30" width="230" height="140" rx="8"/>
+  <rect class="hl" x="55" y="40" width="80" height="28" rx="4"/>
+  <text class="title" x="65" y="60">réseau</text>
+  <text class="text" x="55" y="95">Créer init réseau</text>
+  <text class="text" x="55" y="118">modifier réseau</text>
+  <text class="text" x="55" y="141">* Affiche réseau</text>
+
+  <!-- loader -->
+  <rect class="box" x="40" y="200" width="230" height="120" rx="8"/>
+  <text class="title" x="55" y="232">loader</text>
+  <text class="text" x="55" y="260">Lire in folder</text>
+  <text class="text" x="55" y="283">formaté</text>
+  <text class="text" x="55" y="306">Donne in et out</text>
+
+  <!-- backpp -->
+  <rect class="box" x="40" y="350" width="230" height="120" rx="8"/>
+  <text class="title" x="55" y="382">backpp</text>
+  <text class="text" x="55" y="410">Résout un cycle</text>
+  <text class="text" x="55" y="433">Affiche - console</text>
+
+  <!-- fct_activation -->
+  <rect class="box" x="40" y="505" width="230" height="170" rx="8"/>
+  <rect class="hl" x="55" y="515" width="140" height="28" rx="4"/>
+  <text class="title" x="65" y="535">Fct d’activation</text>
+  <text class="small" x="55" y="570">1-sigmoïde</text>
+  <text class="small" x="55" y="592">2-tan</text>
+  <text class="small" x="55" y="614">3-tanh</text>
+  <text class="small" x="55" y="636">4-gelu</text>
+
+  <!-- Center: lanceur -->
+  <rect class="box" x="340" y="30" width="480" height="520" rx="10"/>
+  <text class="title" x="360" y="62">lanceur</text>
+
+  <text class="text" x="360" y="100">• Crée fenêtre principale &amp; contenu</text>
+  <text class="text" x="360" y="125">• Read_param &amp; initialise interface</text>
+  <text class="text" x="360" y="150">• Set réseau → Formalise+write param</text>
+
+  <text class="text" x="360" y="190">• Créer &amp; Initialise réseau struct_reso</text>
+  <text class="text" x="360" y="215">• Modifie réseau</text>
+  <text class="text" x="360" y="240">• Affiche réseau</text>
+
+  <text class="text" x="360" y="280">• Généralise-test</text>
+  <text class="text" x="360" y="305">• Valide</text>
+  <text class="text" x="360" y="330">• Apprend</text>
+
+  <text class="text" x="360" y="370">• Maj interface - Score</text>
+  <text class="text" x="360" y="395">• Set param.txt</text>
+
+  <!-- Buttons inside lanceur -->
+  <rect class="hl2" x="360" y="430" width="120" height="40" rx="8"/>
+  <text class="title" x="378" y="457">exécuter</text>
+
+  <rect class="hl2" x="360" y="485" width="120" height="40" rx="8"/>
+  <text class="title" x="380" y="512">Set config</text>
+
+  <!-- Right column: interface, Layout, service -->
+  <!-- interface -->
+  <rect class="box" x="920" y="60" width="280" height="140" rx="8"/>
+  <rect class="hl" x="935" y="70" width="110" height="28" rx="4"/>
+  <text class="title" x="945" y="90">interface</text>
+  <text class="text" x="935" y="125">Créer interface</text>
+  <text class="text" x="935" y="148">initiale</text>
+  <text class="text" x="935" y="171">Règle de control</text>
+
+  <!-- Layout (à droite de interface) -->
+  <rect class="box" x="1280" y="60" width="280" height="140" rx="8"/>
+  <rect class="hl" x="1295" y="70" width="90" height="28" rx="4"/>
+  <text class="title" x="1305" y="90">Layout</text>
+  <text class="text" x="1295" y="125">Contient</text>
+  <text class="text" x="1295" y="148">Param de config</text>
+  <text class="text" x="1295" y="171">interface</text>
+
+  <!-- service (sous interface) -->
+  <rect class="box" x="920" y="240" width="280" height="160" rx="8"/>
+  <rect class="hl" x="935" y="250" width="90" height="28" rx="4"/>
+  <text class="title" x="945" y="270">service</text>
+  <text class="text" x="935" y="305">Read_param</text>
+  <text class="text" x="935" y="328">Write_param</text>
+  <text class="text" x="935" y="351">Supprime ligne</text>
+  <text class="text" x="935" y="374">Paramètres.txt</text>
+
+  <!-- Notes boxes -->
+  <rect class="note" x="920" y="575" width="640" height="110" rx="8"/>
+  <text class="title" x="940" y="605">Fct complémentaire :</text>
+  <text class="small" x="940" y="630">• Autres fonctions d’activation</text>
+  <text class="small" x="940" y="652">• Multicouche</text>
+  <text class="small" x="940" y="674">• Affiche résumé à partir du hmi</text>
+
+  <rect class="note" x="340" y="575" width="330" height="110" rx="8"/>
+  <text class="title" x="360" y="605">Note :</text>
+  <text class="small" x="360" y="630">• README.txt : comment utiliser</text>
+  <text class="small" x="360" y="652">• Structure.md : squelette du projet</text>
+  <text class="small" x="360" y="674">• Paramètres.txt : contient les paramètres</text>
+
+  <!-- Arrows / connections -->
+  <!-- reseau <-> lanceur -->
+  <line class="arrow" x1="270" y1="85" x2="340" y2="85" marker-end="url(#arrow)"/>
+  <line class="arrow" x1="340" y1="110" x2="270" y2="110" marker-end="url(#arrow)"/>
+
+  <!-- loader -> lanceur -->
+  <path class="arrow" d="M 270 260 H 310 V 180 H 340" marker-end="url(#arrow)"/>
+
+  <!-- backpp -> lanceur -->
+  <path class="arrow" d="M 270 410 H 310 V 260 H 340" marker-end="url(#arrow)"/>
+
+  <!-- fct_activation -> backpp -->
+  <line class="arrow" x1="155" y1="505" x2="155" y2="470" marker-end="url(#arrow)"/>
+
+  <!-- lanceur <-> interface -->
+  <line class="arrow" x1="820" y1="120" x2="920" y2="120" marker-end="url(#arrow)"/>
+  <line class="arrow" x1="920" y1="150" x2="820" y2="150" marker-end="url(#arrow)"/>
+
+  <!-- interface <-> Layout (horizontal) -->
+  <line class="arrow" x1="1200" y1="110" x2="1280" y2="110" marker-end="url(#arrow)"/>
+  <line class="arrow" x1="1280" y1="140" x2="1200" y2="140" marker-end="url(#arrow)"/>
+
+  <!-- lanceur <-> service (read/write params) -->
+  <path class="arrow" d="M 820 280 H 880 V 320 H 920" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M 920 350 H 880 V 310 H 820" marker-end="url(#arrow)"/>
+
+  <!-- Small caption -->
+  <text class="small muted" x="40" y="705">Diagramme généré (SVG) — structure du projet (modules &amp; dépendances logiques)</text>
+</svg>

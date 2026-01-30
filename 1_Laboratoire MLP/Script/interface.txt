@@ -1,0 +1,19 @@
+Dans lab1/interface
+	refaire au complet  l'interface hmi avec costumtkinter selon l'image suivant.
+	Le hmi doit avoir un air moderne et propre
+	les couleur de fond sont ceux capturées precedemment
+	
+	voici les contraintes
+		sur la premiere ligne de radio boutons permet de selectionner le types de tests (par defaut sur généralisation) 
+		Le mode sélectionne doit se mettre a jour selon la selectionner
+		l'entete ( ligne radio+mode+fichier) doit etre centre verticalement sur la fenetre
+		case de selection permet de selectionner le fonction d'activation
+		le bouton executer permet de lancer le rogramme de c2p59
+		la valeur de chaque case possede un min et max
+		cette valeur doit etre controler avant execution sinon message derreur
+		tous les element gardent leur positions sur la fenetre comme sur l'image
+		L,interface doit etre fidele a l'image.
+		le code doit etre propre et bien epuire
+		tu dois garder les tailles, et les espacement
+	
+

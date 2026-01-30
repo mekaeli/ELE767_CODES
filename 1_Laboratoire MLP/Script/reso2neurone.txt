@@ -1,0 +1,125 @@
+Tu dois cree un module neurone/reso2neurone.py
+Tu dois creer ces varibles et les initialiser comme suit
+	n_in:nombre d'entrees = 2
+	n_c:nombre de couche  y compric celle de sortie = 2
+	N_b:une liste contenant des valeur.
+		chaque valeur represente le nombre de neurone dans la couche correspondante, [2, 1]
+		la position de chaque valeur correspond a celle de la couche
+	biais=	[1, 5], valeur min et max d'un biais (sert a la generation automatique)
+	poids=	[-0.1, 0.1], valeur min et max d'un poids (sert a la generation automatique)
+	X={0,1} listes des valeurs posibles des entrees x (sert a la generation automatique)
+	D={0,1} listes des valeurs posibles des sorties x (sert a la generation automatique)
+	n_fct=1 numero de la fonction d'activation
+	
+Dans le module neurone/reso2neurone.py, ecris une fonction suivante:
+	cree_reso
+		cette fonction genere toutes les variables d'un reseau de neurone.
+		elle recoit
+			n_in:nombre d'entrees
+			n_c:nombre de couche  y compric celle de sortie
+			N_b:une liste contenant des valeur 
+				la position de la valeur correspond a celle de la couche
+				chaque valeur represente le nombre de neurone dans la couche correspondante
+				
+		elle genere et retourne dans un dctionnaire contenant des listes imbriques  struct_reso
+			Xn=liste contenant le nom de variable xi de chaque entree
+				n=n_in
+				i=rang dans n
+				
+			Wn_c=liste contenant les sous liste de poids Wc de chaque couche
+				n_c:nombre de couche cachee y compris celle de sortie
+				
+				Wc=liste contenant le nom de variable wij_c de chaque poids
+					i=rang du neurone(entree) source
+					j=rang du neurone destination
+					c=rang de la couche
+				
+			Bn_c=liste contenant le nom de variable bi_c de chaque biais
+				n_c:nombre de couche cachee y compric celle de sortie
+				i=rang du neurone dans sa couche
+				c=rang de la couche
+
+			Dn_s=liste contenant le nom de variable di de chaque sortie
+				n_s:nombre de neurone dans la couche de sortie
+				i=rang du neurone dans sa couche
+
+		Cette fonction initialise les variabes de struct_reso selon les regles suivantes
+			xi = une valeur aleatoire de la liste X
+			Wc = une valeur aleatoire comprise entre le min et le max de poids
+			bi_c=une valeur aleatoire comprise entre le min et le max de biais
+			di = une valeur aleatoire de la liste D
+		
+		Toutes les indices doivent etre remplacer par leur valeur
+		exemple Xn doit etre X2 pour n=2
+		
+Affiche_reso
+	Cette focntion affiche un struct_reso recu en parametre
+ 
+						
+Dans le module neurone/reso2neurone.py, ecris les fonctions suivantes:			
+	set_reso
+		permet de d'ecrire les valeurs dans struct_reso
+		elle recoit 
+			struct_reso
+			Xn=liste contenant le nom de variable xi
+			Wn_c=liste contenant les sous liste de poids Wc de chaque couche
+			Bn_c=liste contenant le nom de variable bi_c de chaque biais
+			Dn_s=liste contenant le nom de variable di de chaque sortie
+		elle verifie la correspondance de dimention entre les champs de struct_reso et les variables correspondante recu
+		elle met a jour tous les champs de struct_reso avec les variables recu
+		elle retourne struct_reso
+
+test_reso
+	initilialise les variables 
+	appelle cree_reso avec ces variables
+	appelle Affiche_reso
+
+ajoute a la classe mon_reso
+	get_reso qui expose struct_reso
+
+Dans reso2neurone.py
+cree une classe backpp_mat qui 
+	recoit et sinitialise avec struct_reso
+	cree dans la class des fonction similaire a celle de backpp_neurone_mat.py
+	le but est de pouvoir resoudre un systeme de neuronne avec cette classe en connaissant struct_reso
+	
+
+
+dans backpp_mat reogranise l'affiche
+	a chaq etape, on doit pour voir uniquement le cacul numerique avec et les variabes identifier proprement
+	a chaq etape, on doit voir les le resutat numerique avec les variabes identifier proprement
+	
+dans test_reso, tu dois appeller Affiche_reso avant la resolution  
+
+Tois doit avoir un affichage propre des matrice ligne colonne	
+les valeur des matrices doivent etre ecris proproment avec le bon nombre de decimale 
+	exemple 1 et non 1.000000000000
+ne pas afficher struct_reso apres calcul
+tu dois bien identifier les sous liste dans l'affichage
+dans Laffichage apres calcul, tu dois bien les varibles de sortie (expliciter la couche)
+fait les changement necessaire pour une lisibilité agreable a lhumain
+eta doit etre global dans run_neurone.py et donne en parametre a la fonction de backpp_mat si besoin
+	
+pour Paramètres b
+	preferable d'afficher
+		b1_1 = 1
+		b2_1 = 0
+	
+	au lieu de 
+	
+		b1_1, b2_1 = 1, 0
+
+appliquer la meme logique pour b
+
+
+epuirer l,affichage et supprimer les doublons 		
+
+	
+	i=rang du neurone(entree) source
+	j=rang du neurone destination
+	c=rang de la couche
+	
+Nettoye tout le code en supprimant les codes mortes et les commentaires or contexte
+Pour ameliorer la lisibilite (dans tout le projet), Tu dois separer toutes les focntion par
+# ==================== nom de la fonction suivante =========================
+commenter les fonction dans un francais simple et explicite	
