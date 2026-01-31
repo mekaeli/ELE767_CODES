@@ -1,15 +1,23 @@
-from __future__ import annotations
+"""smoke_test
 
-"""Smoke tests (non-GUI) for lab1.
+Rôle
+	Tests rapides (sans GUI) pour valider les éléments critiques de `lab1/`.
 
-Goal: quickly validate the refactor (layout constants + service I/O) without
-starting the CustomTkinter GUI.
+Objectifs
+	- Vérifier que `service.py` lit/écrit/supprime correctement des lignes dans
+	  `parametres.txt` (incluant la conservation de l'en-tête).
+	- Vérifier que `backpp.backprop_update()` modifie les poids/biais et réduit
+	  la perte dans un cas simple.
+	- Simuler l'exécution d'un payload (comme si on cliquait sur "Exécuter")
+	  sans lancer l'interface CustomTkinter.
 
-Run:
-	python -m lab1.smoke_test
-	python lab1/smoke_test.py
-	python smoke_test.py
+Exécution
+	- `python -m lab1.smoke_test`
+	- `python lab1/smoke_test.py`
+	- `python smoke_test.py`
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 import tempfile
@@ -121,6 +129,32 @@ def run() -> None:
 	except Exception:
 		import layout  # type: ignore
 		import service  # type: ignore
+
+	# Import robuste: lanceur (pour convert_label)
+	try:
+		from lab1 import lanceur  # type: ignore
+	except Exception:
+		import lanceur  # type: ignore
+
+	# Smoke test: règle MAX (one-hot)
+	assert service.fonction_max([0.12, -0.32, 0.52, 0.42]) == [0, 0, 1, 0]
+	assert service.fonction_max([]) == []
+	# En cas d'égalité, le premier max gagne (argmax)
+	assert service.fonction_max([1.0, 1.0, 0.0]) == [1, 0, 0]
+
+	# Mini-tests: convert_label() (selon l'énoncé)
+	assert lanceur.convert_label(1, 10) == [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+	assert lanceur.convert_label(2, 10) == [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+	assert lanceur.convert_label(9, 10) == [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+	assert lanceur.convert_label(0, 10) == [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+	# Cas générique (0-based)
+	assert lanceur.convert_label(0, 3) == [1, 0, 0]
+	assert lanceur.convert_label(2, 3) == [0, 0, 1]
+	try:
+		lanceur.convert_label(10, 10)
+		raise AssertionError("convert_label(10, 10) devait lever ValueError")
+	except ValueError:
+		pass
 
 	# Minimal end-to-end check for parametres.txt I/O.
 	line = "[sigmoïde] [[2] [1] [2] [1] [0.1]] [[0.1,0.2]] [[0.0]] [60%]"

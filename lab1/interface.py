@@ -1,25 +1,28 @@
-from __future__ import annotations
+"""interface
 
-"""Interface HMI du laboratoire 1 (CustomTkinter).
+Rôle
+	Interface HMI du laboratoire 1 (CustomTkinter).
 
-Rôle de ce fichier:
-	- Construire l'interface (widgets + layout).
-	- Valider les champs utilisateur (contraintes min/max).
-	- Sauvegarder la configuration dans `lab1/config,json`.
-	- Action "Exécuter": valide les champs puis délègue au lanceur.
+Fonctions principales
+	- Construire l'interface (widgets + layout) via `HMIApp`.
+	- Valider les champs utilisateur (contraintes min/max et cohérences).
+	- Action "Exécuter" : construit un payload puis délègue à `lanceur.execute_payload`.
+
+Flux global (simplifié)
+	UI -> payload (dict) -> lanceur -> (reseau + backpp) -> affichage console
 
 Note:
 	- La fenêtre est volontairement non redimensionnable: on peut donc dériver des largeurs
 	  de contenu à partir des paddings pour garder un layout stable.
 """
 
-import json
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
 import random
 from pathlib import Path
-from tkinter import filedialog
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
 import tkinter.messagebox as messagebox
@@ -35,9 +38,6 @@ except Exception:
 
 
 layout.apply_theme()
-
-
-CONFIG_PATH = Path(__file__).with_name("config,json")
 # Racine locale du module lab1 (aucune dépendance au dossier parent).
 LAB1_ROOT = Path(__file__).resolve().parent
 
@@ -50,7 +50,7 @@ class HMIApp(ctk.CTk):
 		"""Applique les valeurs par défaut fournies au démarrage (si présentes)."""
 		defaults = getattr(self, "startup_defaults", None) or {}
 
-		# Mode au démarrage (1 choix parmi 4)
+		# Mode au démarrage (1 choix parmi 3)
 		startup_mode = defaults.get("mode")
 		if startup_mode is not None and hasattr(self, "mode_var"):
 			try:
@@ -79,7 +79,7 @@ class HMIApp(ctk.CTk):
 			self._set_entry_text("iterations", str(defaults.get("i")))
 		if defaults.get("k") is not None:
 			self._set_entry_text("k_epoques", str(defaults.get("k")))
-		# Applique les effets du mode (label + fichier source + boutons)
+		# Applique les effets du mode (label + boutons)
 		try:
 			self._update_mode_label()
 		except Exception:
@@ -701,7 +701,7 @@ class HMIApp(ctk.CTk):
 		root_frame.grid_rowconfigure(1, weight=0)
 		root_frame.grid_rowconfigure(2, weight=1)
 
-		# ---------- En-tête (modes + fichier source) ----------
+		# ---------- En-tête (modes) ----------
 		header_frame = ctk.CTkFrame(root_frame, fg_color="transparent")
 		header_frame.grid(row=0, column=0, padx=layout.PAD_SECTION_X, pady=(14, 6), sticky="ew")
 
@@ -710,36 +710,18 @@ class HMIApp(ctk.CTk):
 		radio_frame.pack(pady=(layout.PAD_SMALL, 10))
 
 		self._add_radio(radio_frame, "Test unitaire").pack(side="left", padx=16)
-		self._add_radio(radio_frame, "Généralisation").pack(side="left", padx=16)
-		self._add_radio(radio_frame, "Validation").pack(side="left", padx=16)
+		self._add_radio(radio_frame, "Test général").pack(side="left", padx=16)
 		self._add_radio(radio_frame, "Apprentissage").pack(side="left", padx=16)
 
 		self.mode_label = ctk.CTkLabel(
 			header_frame,
-			text="Mode sélectionné : Généralisation",
+			text="Mode sélectionné : Test unitaire",
 			text_color=layout.COLOR_TEXT_TITLE,
 			font=layout.FONT_TITLE,
 		)
 		self.mode_label.pack(pady=(0, 10))
 
-		file_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
-		file_frame.pack(fill="x", pady=(0, 6))
-		file_frame.grid_columnconfigure(0, weight=1)
-		file_frame.grid_columnconfigure(1, weight=0)
-
-		ctk.CTkLabel(
-			file_frame,
-			text="Fichier source",
-			text_color=layout.COLOR_TEXT_MUTED,
-			font=layout.FONT_LABEL,
-		).grid(row=0, column=0, columnspan=2, pady=(0, 6))
-		# Suit la largeur de la fenêtre (évite une zone vide quand WINDOW_W augmente).
-		self.file_entry = self._make_entry(file_frame, width=max(360, layout.CONTENT_WIDTH - 60))
-		self.file_entry.grid(row=1, column=0, padx=(0, layout.PAD_SMALL), sticky="ew")
-		self.file_button = self._make_button(file_frame, text="...", command=self._choose_file, width=34, height=28)
-		self.file_button.grid(row=1, column=1)
-
-		# Synchronise label + fichier + état des boutons avec le mode au démarrage.
+		# Synchronise label + état des boutons avec le mode au démarrage.
 		self._update_mode_label()
 
 		# ---------- Zone paramètres (grille + boutons) ----------
@@ -791,34 +773,30 @@ class HMIApp(ctk.CTk):
 		top_row.grid_columnconfigure(3, weight=0, minsize=layout.SCORE_W + 40)
 		top_row.grid_columnconfigure(4, weight=1)
 
+		# Mise en forme "pilule" (comme les choix de mode) pour:
+		# Fonction act. / Score attendu / Score obtenu
+		pill_kwargs = {
+			"fg_color": layout.COLOR_ENTRY,
+			"border_color": layout.COLOR_BORDER,
+			"border_width": 2,
+			"corner_radius": 18,
+		}
+
+		act_pill = ctk.CTkFrame(top_row, **pill_kwargs)
+		act_pill.grid(row=0, column=1, padx=layout.PAD_MED, pady=(0, layout.PAD_GAP), sticky="n")
 		ctk.CTkLabel(
-			top_row,
+			act_pill,
 			text=layout.UI_LABEL_ACTIVATION,
 			text_color=layout.COLOR_TEXT_MUTED,
 			font=layout.FONT_LABEL,
-		).grid(row=0, column=1, padx=10, pady=(0, 8))
-
-		ctk.CTkLabel(
-			top_row,
-			text=layout.UI_LABEL_SCORE_EXPECTED,
-			text_color=layout.COLOR_TEXT_MUTED,
-			font=layout.FONT_LABEL,
-		).grid(row=0, column=2, padx=10, pady=(0, 8))
-
-		ctk.CTkLabel(
-			top_row,
-			text=layout.UI_LABEL_SCORE_OBSERVED,
-			text_color=layout.COLOR_TEXT_MUTED,
-			font=layout.FONT_LABEL,
-		).grid(row=0, column=3, padx=10, pady=(0, 8))
-
+		).grid(row=0, column=0, padx=layout.PAD_MED, pady=(layout.PAD_SMALL, 0))
 		self.act_var = ctk.StringVar(value="sigmoïde")
 		self.act_menu = ctk.CTkOptionMenu(
-			top_row,
+			act_pill,
 			values=list(layout.ACTIVATION_VALUES),
 			variable=self.act_var,
-			fg_color=layout.COLOR_ENTRY,
-			button_color=layout.COLOR_ENTRY,
+			fg_color=layout.COLOR_PANEL,
+			button_color=layout.COLOR_PANEL,
 			button_hover_color=layout.COLOR_BORDER,
 			text_color=layout.COLOR_TEXT,
 			dropdown_fg_color=layout.COLOR_ENTRY,
@@ -827,15 +805,40 @@ class HMIApp(ctk.CTk):
 			font=layout.FONT_ENTRY,
 			dropdown_font=layout.FONT_ENTRY,
 			width=layout.ACT_W,
-			height=30,
+			height=32,
+			corner_radius=16,
 		)
-		self.act_menu.grid(row=1, column=1, padx=10)
+		self.act_menu.grid(row=1, column=0, padx=layout.PAD_MED, pady=(layout.PAD_SMALL, layout.PAD_MED))
 
-		score_attendu = self._make_entry(top_row, width=layout.SCORE_W)
-		score_attendu.grid(row=1, column=2, padx=10, pady=(0, layout.PAD_GAP))
+		score_att_pill = ctk.CTkFrame(top_row, **pill_kwargs)
+		score_att_pill.grid(row=0, column=2, padx=layout.PAD_MED, pady=(0, layout.PAD_GAP), sticky="n")
+		ctk.CTkLabel(
+			score_att_pill,
+			text=layout.UI_LABEL_SCORE_EXPECTED,
+			text_color=layout.COLOR_TEXT_MUTED,
+			font=layout.FONT_LABEL,
+		).grid(row=0, column=0, padx=layout.PAD_MED, pady=(layout.PAD_SMALL, 0))
+		score_attendu = self._make_entry(score_att_pill, width=layout.SCORE_W, height=32)
+		score_attendu.grid(row=1, column=0, padx=layout.PAD_MED, pady=(layout.PAD_SMALL, layout.PAD_MED))
+		try:
+			score_attendu.configure(corner_radius=16, border_width=2)
+		except Exception:
+			pass
 
-		score_obtenu = self._make_entry(top_row, width=layout.SCORE_W)
-		score_obtenu.grid(row=1, column=3, padx=10, pady=(0, layout.PAD_GAP))
+		score_ob_pill = ctk.CTkFrame(top_row, **pill_kwargs)
+		score_ob_pill.grid(row=0, column=3, padx=layout.PAD_MED, pady=(0, layout.PAD_GAP), sticky="n")
+		ctk.CTkLabel(
+			score_ob_pill,
+			text=layout.UI_LABEL_SCORE_OBSERVED,
+			text_color=layout.COLOR_TEXT_MUTED,
+			font=layout.FONT_LABEL,
+		).grid(row=0, column=0, padx=layout.PAD_MED, pady=(layout.PAD_SMALL, 0))
+		score_obtenu = self._make_entry(score_ob_pill, width=layout.SCORE_W, height=32)
+		score_obtenu.grid(row=1, column=0, padx=layout.PAD_MED, pady=(layout.PAD_SMALL, layout.PAD_MED))
+		try:
+			score_obtenu.configure(corner_radius=16, border_width=2)
+		except Exception:
+			pass
 
 		self.entries["score_attendu"] = score_attendu
 		# Scores en pourcentage.
@@ -1118,7 +1121,7 @@ class HMIApp(ctk.CTk):
 
 	# ==================== _add_radio =========================
 	def _add_radio(self, parent: ctk.CTkFrame, text: str) -> ctk.CTkRadioButton:
-		"""Crée un bouton radio pour le choix du mode (Généralisation/Validation/Apprentissage)."""
+		"""Crée un bouton radio pour le choix du mode (Test général/Apprentissage)."""
 		return ctk.CTkRadioButton(
 			parent,
 			text=text,
@@ -1151,7 +1154,7 @@ class HMIApp(ctk.CTk):
 		- Enregistre la contrainte (min/max/type) dans `self.constraints[key]`.
 		"""
 		cell = ctk.CTkFrame(parent, fg_color="transparent", width=layout.CELL_W, height=layout.CELL_H)
-		cell.grid(row=row, column=col, padx=6, pady=8, sticky="n")
+		cell.grid(row=row, column=col, padx=layout.PAD_GAP, pady=layout.PAD_SMALL, sticky="n")
 		cell.grid_propagate(False)
 
 		ctk.CTkLabel(
@@ -1187,14 +1190,6 @@ class HMIApp(ctk.CTk):
 	def _update_mode_label(self) -> None:
 		"""Met à jour le texte "Mode sélectionné" selon le bouton radio choisi."""
 		self.mode_label.configure(text=f"Mode sélectionné : {self.mode_var.get()}")
-		self._sync_source_file_with_mode()
-		# Exigence: bouton de sélection de fichier inactif en mode Test unitaire.
-		try:
-			if hasattr(self, "file_button"):
-				state = "disabled" if (self.mode_var.get() == "Test unitaire") else "normal"
-				self.file_button.configure(state=state)
-		except Exception:
-			pass
 		# Exigence: bouton Set config actif uniquement en mode Apprentissage.
 		try:
 			if hasattr(self, "set_config_btn"):
@@ -1202,41 +1197,6 @@ class HMIApp(ctk.CTk):
 				self.set_config_btn.configure(state=state)
 		except Exception:
 			pass
-
-	def _sync_source_file_with_mode(self) -> None:
-		"""Met le champ 'Fichier source' à jour selon le mode (chemin absolu).
-
-		- Généralisation -> data_test.txt
-		- Validation     -> data_vc.txt
-		- Apprentissage  -> data_train.txt
-		"""
-		mode = getattr(self, "mode_var", None)
-		if mode is None:
-			return
-		selected = mode.get()
-		# Exigence: en mode Test unitaire, le fichier source est N/A.
-		if selected == "Test unitaire":
-			if hasattr(self, "file_entry"):
-				self.file_entry.delete(0, "end")
-				self.file_entry.insert(0, "s/o")
-			return
-		filename = layout.DEFAULT_SOURCE_FILES.get(selected)
-		if not filename:
-			return
-		full_path = (LAB1_ROOT / filename).resolve()
-		if hasattr(self, "file_entry"):
-			self.file_entry.delete(0, "end")
-			self.file_entry.insert(0, str(full_path))
-
-	def _normalize_source_path(self, raw_path: str) -> str:
-		"""Retourne un chemin absolu (résolu) à partir du champ fichier."""
-		text = (raw_path or "").strip()
-		if not text:
-			return ""
-		p = Path(text)
-		if not p.is_absolute():
-			p = LAB1_ROOT / p
-		return str(p.resolve())
 
 	# ==================== _on_set_config =========================
 	def _on_set_config(self) -> None:
@@ -1338,20 +1298,6 @@ class HMIApp(ctk.CTk):
 		else:
 			messagebox.showwarning("Set config", msg or "Refus d'écriture (doublon)")
 
-	# ==================== _choose_file =========================
-	def _choose_file(self) -> None:
-		"""Ouvre une boîte de dialogue et met le chemin choisi dans le champ fichier."""
-		try:
-			if hasattr(self, "mode_var") and self.mode_var.get() == "Test unitaire":
-				messagebox.showinfo("Fichier source", "Non disponible en mode Test unitaire")
-				return
-		except Exception:
-			return
-		path = filedialog.askopenfilename(title="Choisir un fichier")
-		if path:
-			path = str(Path(path).resolve())
-			self.file_entry.delete(0, "end")
-			self.file_entry.insert(0, path)
 
 	# ==================== _parse_value =========================
 	def _parse_value(self, key: str, raw: str):

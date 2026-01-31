@@ -1,111 +1,123 @@
-
-STRUCTURE DU SYSTEME (selon lab1/learn.py)
+STRUCTURE DU PROJET (ETAT ACTUEL - LAB1/)
 =========================================
 
-1) Idée générale
+1) Vue générale
 ---------------
-On construit un réseau de neurones entièrement connecté (feed-forward) avec:
-	- une couche d'entrée de taille nx
-	- (nc-2) couches cachées
-	- une couche de sortie de taille ncs
+Ce dossier contient l’implémentation du laboratoire 1:
+  - un réseau MLP (feed-forward) entièrement connecté
+  - une itération de rétropropagation (backprop)
+  - une interface graphique (CustomTkinter)
+  - un affichage console (pédagogique + résumé)
 
-Dans learn.py, les tailles des couches sont construites comme suit:
+Calcul (approche matricielle, par couche L):
+  - z_L = a_{L-1} @ W_L + b_L
+  - a_L = Fi(z_L)
+  - fp_L = Fp(z_L)
 
-	Couche 0 (entrée)        : nx
-	Couche 1 (cachée 1)       : nsc1
-	Couche 2 (cachée 2)       : nsc2
-	Couche (nc-1) (sortie)    : ncs
-	Toutes les autres couches : ncs
-		(ex: si nc > 4, alors les couches 3..(nc-2) ont ncs neurones)
-
-Donc, la liste des tailles est:
-	layer_sizes = [taille_couche0, taille_couche1, ..., taille_couche(nc-1)]
-
-
-2) Vecteurs et paramètres générés
---------------------------------
-Entrée:
-	vecX = [x1_1, x1_2, ..., x1_nx]
-	- taille: nx
-	- valeurs par défaut: aléatoires 0 ou 1
-
-Sortie désirée:
-	vecD = [d(nc-1)_1, d(nc-1)_2, ..., d(nc-1)_ncs]
-	- taille: ncs
-	- valeurs par défaut: aléatoires 0 ou 1
-
-Poids:
-	vecW = [W1, W2, ..., W(nc-1)]
-	où chaque W_L est une matrice (n_in x n_out)
-
-	Pour une couche L (L=1..nc-1):
-		W_L a la taille: (layer_sizes[L-1] x layer_sizes[L])
-
-Biais:
-	vecB = [b1, b2, ..., b(nc-1)]
-	où chaque b_L est un vecteur de taille layer_sizes[L]
+Backpropagation (convention du laboratoire):
+  - delta_sortie = (d - y) ⊙ fp_sortie
+  - delta_cachee = (W_suivante @ delta_suivante) ⊙ fp_courante
+  - dW = eta * outer(a_precedente, delta)
+  - db = eta * delta
+  - W <- W + dW
+  - b <- b + db
 
 
-3) Convention de nommage (variables explicites)
+2) Modules et responsabilités (lab1/)
+------------------------------------
+A) Modules “coeur”
+  - reseau.py
+    - Construit et manipule la structure `struct_reso` (X/W/B/D).
+    - Fournit l’affichage des paramètres (style du laboratoire).
+    - Ne fait pas l’apprentissage: représentation + affichage.
+
+  - backpp.py
+    - Coeur numérique + affichage console.
+    - NeuroneMat: forward / deltas / correcteurs / mises à jour (listes Python).
+    - backpp: façade autour de struct_reso (conversion struct -> matrices -> struct).
+
+  - fct_activation.py
+    - Fonctions d’activation (sigmoïde, tan, tanh, gelu) + dérivées.
+
+B) Modules “application / orchestration”
+  - lanceur.py
+    - Point d’entrée “application”.
+    - Reçoit un payload (depuis l’UI), valide, crée struct_reso, puis exécute.
+    - Option 1 (Test unitaire): affichage détaillé.
+    - Options 2–4 (Généralisation / Validation / Apprentissage): logique complète à venir,
+      mais l’aperçu console minimal est déjà branché.
+
+  - interface.py
+    - Interface CustomTkinter.
+    - Construit un payload puis appelle lanceur.execute_payload.
+
+C) Modules “support”
+  - service.py
+    - Lecture/écriture/suppression de lignes de configuration dans parametres.txt.
+
+  - layout.py
+    - Constantes UI (thème, couleurs, tailles).
+    - Mapping des modes -> fichiers data_*.txt.
+
+  - smoke_test.py
+    - Smoke tests sans GUI (service + backprop + exécution d’un payload).
+
+  - loader.py
+    - Réservé / extension (placeholder).
+
+  - __init__.py
+    - Package Python.
+
+
+3) Format de struct_reso
+------------------------
+struct_reso est un dictionnaire représentant le réseau sous forme “nommée”.
+
+Clés typiques:
+  - X{n_in}      : entrées, liste (nom, valeur) ex: ('x1', 1.0)
+  - D{n_out}     : cibles,  liste (nom, valeur) ex: ('d1', 0)
+  - W{n_layers}  : poids,   liste de couches, chaque couche = liste (nom, valeur)
+  - B{n_layers}  : biais,   liste de couches, chaque couche = liste (nom, valeur)
+
+Convention de nommage (couche k en 1..n_layers):
+  - poids: w{i}{j}_{k} = poids de l’entrée i vers neurone j (couche k)
+  - biais : b{j}_{k}   = biais du neurone j (couche k)
+
+
+4) Flux d’exécution
+------------------
+A) Via interface graphique
+  1. interface.py valide les champs et construit un payload (dict).
+  2. lanceur.execute_payload(payload):
+    - valide + met à jour l’état
+    - crée struct_reso via reseau.py
+    - exécute via backpp.py (affichage console)
+
+B) Via console (tests)
+  - Exécuter les smoke tests:
+    python -m lab1.smoke_test
+
+
+5) Affichage console (exigence du laboratoire)
 ----------------------------------------------
-Dans learn.py, on associe aussi des noms pour faciliter l'identification:
+Sections “standard”:
+  - Paramètres
+  - Résumé
+  - struct_reso (affiché avec le même style que “Paramètres”, via Affiche_reso)
 
-	Entrées:
-		x1_1, x1_2, ..., x1_nx
-
-	Poids:
-		wL_i_j = poids qui relie:
-			- le neurone i de la couche (L-1)
-			- au neurone j de la couche L
-		Exemple: w2_3_7 = de couche 1 neurone 3 -> couche 2 neurone 7
-
-	Biais:
-		bL_j = biais du neurone j dans la couche L
-
-	Sorties désirées:
-		d(nc-1)_j = cible de la sortie j
+Comportement actuel:
+  - Option 1 (Test unitaire): affichage détaillé (étapes intermédiaires + résumé).
+  - Option différent de 1 (Généralisation / Validation / Apprentissage):
+    UNIQUEMENT ces trois sections doivent être affichées:
+      1) Paramètres
+      2) Résumé
+      3) struct_reso
+    (les sections Forward/Deltas/Correcteurs/Mises à jour ne sont pas imprimées)
 
 
-4) Schéma (exemple avec les valeurs par défaut)
-----------------------------------------------
-Paramètres par défaut:
-	nx=5, nc=4, nsc1=15, nsc2=15, ncs=10
-
-Tailles des couches:
-	couche 0:  5   (entrée)
-	couche 1: 15   (cachée 1)
-	couche 2: 15   (cachée 2)
-	couche 3: 10   (sortie)
-
-Schéma:
-
-	vecX (5)
-		|
-		|  W1: (5 x 15)   + b1: (15)
-		v
-	couche 1 (15)
-		|
-		|  W2: (15 x 15)  + b2: (15)
-		v
-	couche 2 (15)
-		|
-		|  W3: (15 x 10)  + b3: (10)
-		v
-	sortie y (10)   (comparée à vecD (10))
-
-
-5) Calcul (approche matricielle)
--------------------------------
-Pour chaque couche L:
-	zL = a(L-1) @ W_L + b_L
-	aL = Fi(zL)   (fonction d'activation n_fct)
-	fpL = Fp(zL)  (dérivée)
-
-Puis backpropagation (NeuroneMat):
-	delta_sortie = (d - a_sortie) * fp_sortie
-	delta_cachee = (delta_suivante @ W_suivante^T) * fp_courante
-	dW = eta * outer(a_precedente, delta_courante)
-	db = eta * delta_courante
-	W <- W + dW
-	b <- b + db
+6) Données et configuration
+---------------------------
+  - parametres.txt : configurations sauvegardées (service.py)
+  - config,json    : configuration locale UI (interface.py)
+  - data_train.txt / data_vc.txt / data_test.txt : fichiers de données (modes 2–4; logique à venir)
 

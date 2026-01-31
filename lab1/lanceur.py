@@ -1,8 +1,31 @@
+"""lanceur
+
+Rôle
+	Point d'entrée "application" du laboratoire 1.
+
+	Ce module orchestre :
+		- la lecture/écriture des configurations (via `service.py`)
+		- le lancement de l'interface graphique (via `interface.py`)
+		- l'exécution d'un "payload" provenant de l'UI (validation + exécution)
+		- le mode *Test unitaire* (option 1) qui affiche le calcul détaillé
+		  (via `backpp.backpp.resolution_affiche`)
+
+Notes
+	- La logique d'apprentissage/backprop est dans `backpp.py`.
+	- La structure `struct_reso` est produite par `reseau.py`.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+import copy
 import os
 import unicodedata
+
+
+# Racine des fichiers d'entrée (datasets / data_*.txt)
+root = Path(__file__).resolve().parent / "data"
 
 
 ACTIVATION_TO_N_FCT: dict[str, int] = {
@@ -53,6 +76,48 @@ def _env_bool(name: str, default: bool) -> bool:
 		return bool(default)
 	except Exception:
 		return bool(default)
+
+
+def convert_label(label: int, nb_sorties: int) -> list[int]:
+	"""Convertit un label en vecteur binaire (one-hot) de taille `nb_sorties`.
+
+	Cas spécial (image fournie, nb_sorties=10, chiffres):
+	- ordre des classes = 1,2,3,4,5,6,7,8,9,0
+	  donc 0 est encodé sur la dernière position.
+
+	Sinon (générique):
+	- accepte des labels 0..nb_sorties-1 (0-based)
+	- accepte aussi 1..nb_sorties (1-based)
+	"""
+	try:
+		lab = int(label)
+		n_out = int(nb_sorties)
+	except Exception as exc:
+		raise ValueError(f"arguments invalides: label={label!r}, nb_sorties={nb_sorties!r}") from exc
+
+	if n_out <= 0:
+		raise ValueError("nb_sorties doit être >= 1")
+
+	# Cas digits (comme sur l'image): nb_sorties=10, classes {1..9,0}
+	if n_out == 10:
+		if not (0 <= lab <= 9):
+			raise ValueError("label invalide pour nb_sorties=10 (attendu un chiffre 0..9)")
+		vec = [0] * 10
+		idx = 9 if lab == 0 else (lab - 1)
+		vec[idx] = 1
+		return vec
+
+	# Cas générique: 0-based prioritaire
+	if 0 <= lab < n_out:
+		idx = lab
+	elif 1 <= lab <= n_out:
+		idx = lab - 1
+	else:
+		raise ValueError(f"label hors plage: {lab} (attendu 0..{n_out-1} ou 1..{n_out})")
+
+	vec = [0] * n_out
+	vec[idx] = 1
+	return vec
 
 
 @dataclass(frozen=True)
@@ -150,15 +215,17 @@ class LanceurState:
 
 	# Apprentissage / exécution
 	n_fct: int = 1
-	i: int = 4
-	k: int = 40
+	i: int = 1
+	N: int = 1
+	j: int = 1
+	k: int = 4
 	test_unitaire: bool = True
 
 	# UI / suivi
 	score_ob: str = "0%"
 	n_ok: int = 0
 	n_nok: int = 0
-	N_fich: int = 0
+	
 
 	# Config réseau (courante)
 	Wn_c: list[list[float]] = field(default_factory=list)
@@ -176,8 +243,8 @@ class LanceurState:
 			"k": self.k,
 			"Wn_c": self.Wn_c,
 			"Bn_c": self.Bn_c,
-			# Mode UI au démarrage (un seul choix parmi 4)
-			"mode": ("Test unitaire" if self.test_unitaire else "Généralisation"),
+			# Mode UI au démarrage (un seul choix parmi 3)
+			"mode": ("Test unitaire" if self.test_unitaire else "Test général"),
 		}
 
 
@@ -314,9 +381,7 @@ def execute_payload(payload: dict) -> tuple[bool, str]:
 				eta=eta,
 				n_fct=STATE.n_fct,
 				update_struct=True,
-				show_params=False,
-				show_equations=True,
-				show_resume=True,
+				log_console="détaillé",
 				precision=6,
 			)
 		except Exception as exc:
@@ -325,10 +390,162 @@ def execute_payload(payload: dict) -> tuple[bool, str]:
 		mode = str(payload.get("mode") or "").strip()
 		return True, f"OK (mode={mode}, test_unitaire=True)"
 
-	# 3) Options 2-4: modes (à venir)
-	if mode in {"Généralisation", "Validation", "Apprentissage"}:
-		return False, f"Mode '{mode}' à venir (test_unitaire désactivé)"
+	# 3) Options 2-3: modes (à venir)
+	if mode in {"Test général", "Généralisation", "Apprentissage"}:
+		# Exigence d'affichage (options != 1): n'afficher que
+		# 	- Paramètres
+		# 	- Résumé
+		# 	- struct_reso
+		# (pas de Forward/Deltas/Correcteurs/Mises à jour en console).
+		#
+		# La logique complète de ces modes (lecture data_*.txt, boucles d'époques,
+		# métriques, etc.) reste à venir; on fournit toutefois l'aperçu console
+		# minimal demandé.
+		try:
+			bp = backpp(struct_reso, n_fct=STATE.n_fct, eta=eta)
+			bp.resolution_affiche(
+				eta=eta,
+				n_fct=STATE.n_fct,
+				update_struct=True,
+				log_console="minimal",
+				precision=6,
+			)
+		except Exception as exc:
+			return False, f"Mode '{mode}' à venir (aperçu console minimal en échec): {exc}"
+		return False, f"Mode '{mode}' à venir (aperçu console minimal affiché)"
 	return False, f"Mode invalide: '{mode}'"
+
+
+def test_validation(
+	n_in: int,
+	n_c: int,
+	n_s: int,
+	N_b: list[int],
+	biais: list[float],
+	poids: list[float],
+	X: list[float] | list[int],
+	D: list[float] | list[int],
+	Wn_c: list[list[float]],
+	Bn_c: list[list[float]],
+	nb_sorties: int,
+	eta: float,
+	n_fct: int,
+	*,
+	fichier: Path | None = None,
+	root_dir: Path = root,
+) -> tuple[int, int, float]:
+	"""Valide un réseau sur un fichier de validation (data_vc).
+
+	Spécification (résumé de l'énoncé):
+	- Initialise un nouveau `struct_reso`
+	- Garde des copies locales de `Wn_c` / `Bn_c` (ne doivent pas changer)
+	- Ouvre le fichier `f"{n_in}_data_vc.txt"` (ou `fichier` si fourni)
+	- Pour chaque ligne: parse `label: x1 x2 ...`, convertit le label via
+	  `convert_label()`, injecte X/W/B/D dans le `struct_reso`, calcule la sortie
+	  via `backpp.forward()` (sans mise à jour), compare argmax(Y) à D
+	- Affiche et retourne (n_ok, n_nok, pourcentage)
+
+	Important
+	- Cette fonction ne lit pas `STATE`: toutes les variables nécessaires
+	  doivent être passées en entrée (mêmes variables globales que dans lanceur).
+	"""
+	# Imports robustes: fonctionne depuis la racine ou depuis lab1/
+	try:
+		from lab1.reseau import mon_reso
+	except Exception:
+		from reseau import mon_reso  # type: ignore
+
+	try:
+		from lab1.backpp import backpp
+	except Exception:
+		from backpp import backpp  # type: ignore
+
+	try:
+		from lab1 import service
+	except Exception:
+		import service  # type: ignore
+
+	try:
+		from lab1 import loader
+	except Exception:
+		import loader  # type: ignore
+
+	use_n_in = int(n_in)
+	use_n_c = int(n_c)
+	use_n_s = int(n_s)
+	use_N_b = list(N_b)
+	use_nb_sorties = int(nb_sorties)
+	use_eta = float(eta)
+	use_n_fct = int(n_fct)
+
+	if use_n_in <= 0:
+		raise ValueError("n_in doit être >= 1")
+	if use_n_c < 0:
+		raise ValueError("n_c doit être >= 0")
+	if use_n_s <= 0:
+		raise ValueError("n_s doit être >= 1")
+	if use_nb_sorties <= 0:
+		raise ValueError("nb_sorties doit être >= 1")
+	if not use_N_b:
+		raise ValueError("N_b invalide")
+	if use_N_b[-1] != use_nb_sorties:
+		raise ValueError("nb_sorties doit correspondre à N_b[-1]")
+
+	# Copies locales immuables (principe: ne pas muter les poids/biais reçus)
+	Wn_c_fixed = copy.deepcopy(Wn_c)
+	Bn_c_fixed = copy.deepcopy(Bn_c)
+
+	# Choix du fichier
+	file_path = loader.resolve_validation_file(use_n_in, root_dir=root_dir, fichier=fichier)
+
+	# 1) Init struct_reso
+	r = mon_reso(
+		n_in=use_n_in,
+		n_c=use_n_c,
+		n_s=use_n_s,
+		N_b=use_N_b,
+		biais=biais,
+		poids=poids,
+		X=X,
+		D=D,
+		seed=None,
+	)
+	struct_reso = r.cree_reso()
+	bp = backpp(struct_reso, n_fct=use_n_fct, eta=use_eta)
+
+	n_ok = 0
+	n_nok = 0
+
+	# Lecture séquentielle via loader
+	for Dn_s_local, Xn_local in loader.iter_validation_samples_cached(
+		file_path,
+		n_in=use_n_in,
+		nb_sorties=use_nb_sorties,
+		convert_label=convert_label,
+	):
+		# Injecte X/W/B/D dans struct_reso
+		struct_reso = r.set_reso(struct_reso, Xn_local, Wn_c_fixed, Bn_c_fixed, Dn_s_local)
+		bp.struct_reso = struct_reso
+
+		# Résolution (sans mise à jour)
+		y = bp.forward(n_fct=use_n_fct)
+		Y_max = service.fonction_max(y)
+
+		if Y_max == Dn_s_local:
+			n_ok += 1
+		else:
+			n_nok += 1
+
+	# Stats
+	total = n_ok + n_nok
+	pct = 0.0 if total == 0 else (100.0 * n_ok / total)
+	print(f"Validation: OK={n_ok} | NOK={n_nok} | Score={pct:.2f}% | fichier={file_path.name}")
+
+	# Sanity: les paramètres passés ne doivent pas avoir changé
+	if Wn_c_fixed != Wn_c or Bn_c_fixed != Bn_c:
+		raise RuntimeError("Wn_c/Bn_c ont été modifiés pendant la validation (inattendu)")
+
+	return n_ok, n_nok, pct
 
 
 def main() -> None:

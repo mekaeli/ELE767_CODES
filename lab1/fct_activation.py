@@ -1,17 +1,41 @@
-"""Fonctions d'activation (Fi) et leurs dérivées (Fp).
+r"""fct_activation
 
-Ce module regroupe les 4 fonctions d'activation utilisées dans le cours:
-- sigmoïde
-- tanh
-- gelu (approx.)
-- tan
+Rôle
+	Fonctions d'activation (Fi) et dérivées (Fp) utilisées par le laboratoire.
 
-Chaque fonction:
-- reçoit une activation i (float)
-- retourne [Fi, Fp] (liste de 2 floats)
+Conventions
+	- Les fonctions prennent en entrée une valeur scalaire `i` (pré-activation).
+	- Elles retournent une paire `[Fi, Fp]` (liste de deux floats) afin d'être
+	  directement déballable: `Fi, Fp = ...`.
+
+Fonctions disponibles
+	- `sigmoide_et_derivative(i)` : $\sigma(i)$ et $\sigma(i)\,(1-\sigma(i))$
+	- `tanh_et_derivative(i)` : $\tanh(i)$ et $1-\tanh(i)^2$
+	- `gelu_et_derivative(i)` : GELU (approx.) et dérivée (approx.)
+	- `tan_et_derivative(i)` : $\tan(i)$ et $1/\cos(i)^2$
+
+Notes numériques
+	Certaines activations (ex: tan) peuvent produire de très grandes valeurs
+	lorsque le cosinus est proche de 0. Les fonctions ici sont volontairement
+	"brutes" (pas de clipping) pour coller au cours.
 """
 
 import math
+
+
+def _sigmoid_stable(x: float) -> float:
+	"""Sigmoïde numériquement stable.
+
+	Évite les overflows de exp() quand |x| est grand.
+	"""
+	xf = float(x)
+	if xf >= 0.0:
+		# exp(-x) est dans (0, 1] ici (pas d'overflow)
+		z = math.exp(-xf)
+		return 1.0 / (1.0 + z)
+	# x < 0: exp(x) est dans (0, 1] (pas d'overflow)
+	z = math.exp(xf)
+	return z / (1.0 + z)
 
 
 # ==================== sigmoide_et_derivative =========================
@@ -22,13 +46,13 @@ def sigmoide_et_derivative(activation_i):
 		activation_i: valeur i (avant activation).
 
 	Sortie:
-		[Fi, Fp]
+		[Fi, Fp] (liste de deux floats)
 		- Fi = 1 / (1 + exp(-i))
 		- Fp = Fi * (1 - Fi)
 	"""
 
-	Fi = 1 / (1 + math.exp(-activation_i))
-	Fp = Fi * (1 - Fi)
+	Fi = _sigmoid_stable(float(activation_i))
+	Fp = Fi * (1.0 - Fi)
 	return [Fi, Fp]
 
 
@@ -40,7 +64,7 @@ def tanh_et_derivative(activation_i):
 		activation_i: valeur i (avant activation).
 
 	Sortie:
-		[Fi, Fp]
+		[Fi, Fp] (liste de deux floats)
 		- Fi = tanh(i)
 		- Fp = 1 - Fi^2
 	"""
@@ -61,7 +85,7 @@ def gelu_et_derivative(activation_i):
 		activation_i: la valeur i (avant activation).
 
 	Sortie:
-		[Fi, Fp]
+		[Fi, Fp] (liste de deux floats)
 		- Fi = 0.5 * i * (1 + tanh( sqrt(2/pi) * (i + 0.044715 * i^3) ))
 		- Fp = dérivée approchée associée
 	"""
@@ -91,7 +115,7 @@ def tan_et_derivative(activation_i):
 		activation_i: la valeur i (avant activation).
 
 	Sortie:
-		[Fi, Fp]
+		[Fi, Fp] (liste de deux floats)
 		- Fi = tan(i)
 		- Fp = 1 / cos(i)^2
 	"""

@@ -1,6 +1,29 @@
+"""service
+
+Rôle
+	Services "non-UI" utilisés par le laboratoire 1.
+
+	Ce module encapsule principalement la gestion du fichier de configuration
+	`parametres.txt` :
+		- lecture/écriture/suppression de lignes
+		- validation du nouveau format (blocs entre crochets)
+
+Utilisation
+	- Appelé depuis l'interface (UI) et depuis le lanceur.
+	- Ne doit pas faire planter l'application sur une erreur d'I/O.
+
+Notes
+	Les fonctions sont volontairement simples et sans dépendances externes.
+"""
+
+###################################
+###  fonction complementaire 1  ###
+###################################
+
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 try:
 	from lab1 import layout  # import via package si disponible
@@ -195,3 +218,26 @@ def validate_parametres_line_new_format(line: str) -> None:
 		raise ValueError("nb_neurones doit contenir exactement nb_couches valeurs")
 	if any(int(v) <= 0 for v in vals):
 		raise ValueError("nb_neurones: toutes les valeurs doivent être ≥ 1")
+
+
+###################################
+###  fonction complementaire 2  ###
+###################################
+
+
+def fonction_max(valeurs: Sequence[float]) -> list[int]:
+	"""Convertit une liste analogique en liste binaire (0/1) via la règle MAX.
+
+	Règle:
+	- l'élément de plus grande valeur devient 1
+	- tous les autres deviennent 0
+
+	Note:
+	- en cas d'égalité, le premier maximum reçoit le 1 (comportement argmax).
+	"""
+	if not valeurs:
+		return []
+
+	# Argmax en une passe (tie-break: premier maximum).
+	max_index = max(range(len(valeurs)), key=lambda i: valeurs[i])
+	return [1 if i == max_index else 0 for i in range(len(valeurs))]

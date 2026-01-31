@@ -1,0 +1,112 @@
+
+MÉTHODE (lab1/data/file_concerter.py) - README
+============================================
+
+1) Objet
+--------
+Convertir chaque entrée (un mot prononcé) composée de X trames (frames) en une
+représentation de taille fixe utilisable par un MLP.
+	- On fixe le nombre de trames à N (par défaut: N ∈ {40, 50, 60}).
+	- On conserve uniquement les paramètres statiques: 12 coefficients par trame.
+	- Dimension finale: N × 12 (donc 480/600/720 valeurs pour N=40/50/60).
+	- Chaque ligne de sortie reste étiquetée: <label>: <N×12 valeurs>.
+
+
+2) Format des fichiers d’entrée
+-------------------------------
+Chaque ligne est une entrée (un exemple) au format:
+	<label>: v1 v2 v3 ... vM
+	- Le label est un chiffre suivi de « : » (ex: 8:).
+	- Les vi sont des réels (float).
+
+
+3) Interprétation des données
+-----------------------------
+Les vi représentent des trames concaténées (flatten).
+On suppose que le vecteur peut être découpé en T trames de C coefficients:
+	M = T × C
+
+Le script essaie de détecter C parmi {39, 26, 13}:
+	- C = 39 (cas MFCC “complet”)
+		12 statiques + Es + 12 dynamiques (Δ) + Ed + 12 accélérations (ΔΔ) + Edd
+		Indices (0-based):
+			Es  = 12
+			Ed  = 25
+			Edd = 38
+
+	- C = 26
+		12 statiques + Es + 12 dynamiques (Δ) + Ed
+
+	- C = 13
+		12 statiques + Es
+
+Remarque:
+	- Si M = 1560 et C = 39, alors T = 40.
+	  Dans ce cas, l’entrée a déjà 40 trames; la sélection par énergie conserve
+	  simplement ces 40 trames (pas de réduction).
+
+
+4) Définition du score d’énergie (Es)
+------------------------------------
+On utilise Es (énergie statique) comme score d’importance d’une trame.
+Pour une trame f (vecteur de longueur C), on prend:
+	score(f) = |f[Es_index]|
+Le |.| (valeur absolue) rend la sélection robuste aux signes.
+
+
+5) Sélection par énergie (réduction X → N)
+-----------------------------------------
+Soit une séquence de T trames f0..f(T-1).
+On veut sélectionner N trames “les plus significatives”.
+
+Étapes:
+	1) Calculer l’énergie de chaque trame:
+		ei = |fi[Es_index]|
+	2) Prendre les N indices ayant les plus grandes énergies.
+	3) IMPORTANT: trier ces indices par ordre croissant pour conserver l’ordre
+	   temporel (on garde la structure du mot).
+
+Cas T < N:
+	- On garde toutes les trames.
+	- On complète (padding) avec des trames nulles (zéros) jusqu’à N trames.
+
+
+6) Extraction des paramètres statiques + vectorisation
+------------------------------------------------------
+Après sélection/padding, on a exactement N trames de longueur C.
+	- On conserve uniquement les 12 premières valeurs de chaque trame:
+		stat(fi) = fi[0:12]
+	- On concatène les N blocs de 12 valeurs (flatten):
+		X_out = [stat(f0), stat(f1), ..., stat(f(N-1))]
+
+
+7) Sorties générées
+-------------------
+Le script peut générer plusieurs fichiers de sortie d'un coup.
+Par défaut, il produit 3 versions:
+	40_<nom_source>.txt
+	50_<nom_source>.txt
+	60_<nom_source>.txt
+
+Format du fichier de sortie (une ligne par exemple):
+	<label>: x1 x2 ... x(N×12)
+Ce qui fait (1 + N×12) “tokens” si on compte le label comme 1 token.
+
+
+8) Utilisation
+--------------
+A) Lancer la conversion (depuis la racine du projet)
+	python lab1/data/file_concerter.py
+
+B) Entrées par défaut
+	Les fichiers d'entrée attendus sont dans le même dossier que le script:
+		data_train.txt, data_vc.txt, data_test.txt  (dans lab1/data/)
+
+C) Dépôt des sorties
+	Pour chaque source, la sortie est écrite dans le même répertoire que la source
+	(ex: lab1/data/40_data_train.txt).
+
+D) Exemple avec un autre dossier
+	Si tu fournis explicitement un autre chemin (ex: --train autre_dossier/data_train.txt),
+	les sorties N_<nom_source> seront déposées dans ce même autre_dossier.
+

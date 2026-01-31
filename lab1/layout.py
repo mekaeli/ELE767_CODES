@@ -1,6 +1,7 @@
-from __future__ import annotations
+"""layout
 
-"""Constantes et helpers de layout (UI) pour le lab1.
+Rôle
+	Constantes et helpers de mise en forme (UI) pour le laboratoire 1.
 
 Ce module centralise **toutes** les données de mise en forme:
 - thème (couleurs)
@@ -11,7 +12,13 @@ Ce module centralise **toutes** les données de mise en forme:
 Important:
 - `init_fonts()` doit être appelé après la création de la fenêtre Tk/CTk.
 - `apply_theme()` peut être appelé dès l'import (avant la création de la fenêtre).
+
+Pourquoi ce module existe
+	Éviter la duplication des constantes UI dans `interface.py` et rendre le
+	changement de style (couleurs/dimensions) localisé à un seul endroit.
 """
+
+from __future__ import annotations
 
 import ctypes
 import sys
@@ -65,10 +72,10 @@ UI_SCALING = 1.0
 # ========================
 # Dimensions des widgets
 # ========================
-ENTRY_W = 90
-SCORE_W = 120
-ACT_W = 170
-CELL_W = 100
+ENTRY_W = 120
+SCORE_W = 160
+ACT_W = 210
+CELL_W = 150
 CELL_H = 112
 BTN_W = 120
 BTN_H = 30
@@ -83,8 +90,8 @@ PAD_SECTION_Y = 10
 PAD_INNER = 12
 PAD_SMALL = 8
 PAD_TINY = 2
-PAD_GAP = 6
-PAD_MED = 10
+PAD_GAP = 10
+PAD_MED = 14
 
 # Largeur utile pour les panneaux internes.
 # Fenêtre non redimensionnable → on dérive des paddings pour éviter les débordements.
@@ -186,7 +193,7 @@ def center_window(window, width: int | None = None, height: int | None = None) -
 
 # Entête du fichier parametres.txt
 PARAMETRES_HEADER = (
-	"[Focntion act.] [[nb d'entrées] [nb couches cachées] [nb neorones/cou.cachées] "
+	"[Focntion act.] [[nb d'entrées] [nb couches cachées] [nb nerones/cou.cachées] "
 	"[nb de sorties] [eta]] [poid Wn_c] [biais Bn_c] [Score]"
 )
 

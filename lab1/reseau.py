@@ -1,21 +1,33 @@
 """reseau
 
-Structure de réseau de neurones (orienté classe).
+Rôle
+	Décrit et construit la *structure* d'un réseau de neurones (MLP) sous la
+	forme d'un dictionnaire `struct_reso`.
 
-Ce module expose la classe `mon_reso`, utilisée pour créer, afficher et mettre à
-jour une structure `struct_reso` (dictionnaire) contenant:
-	- X{n_in} : liste des entrées (paires (nom, valeur))
-	- W{n_layers}  : liste des couches de poids (paires (nom, valeur))
-	- B{n_layers}  : liste des couches de biais (paires (nom, valeur))
-	- D{n_out} : liste des sorties désirées (paires (nom, valeur))
+Ce module est volontairement autonome
+	Il ne dépend d'aucun autre module du projet. Il sert de brique de base pour :
+		- initialiser les paramètres (X, W, b, d)
+		- afficher/éditer ces paramètres dans le style attendu par le laboratoire
 
-Où:
-	- n_c = nombre de couches cachées (sans la sortie)
-	- n_s = nombre de couches de sortie
+Structure `struct_reso`
+	`struct_reso` est un dictionnaire contenant des paires (nom, valeur). Les clés
+	portent les dimensions et ont la forme :
+		- X{n_in} : liste des entrées (nom, valeur) ex. ('x1', 1)
+		- W{n_layers} : liste de couches de poids, une couche = liste (nom, valeur)
+		- B{n_layers} : liste de couches de biais, une couche = liste (nom, valeur)
+		- D{n_out} : liste des sorties désirées (nom, valeur) ex. ('d1', 0)
+
+Dimensions
+	- n_c : nombre de couches cachées
+	- n_s : nombre de couches de sortie (typiquement 1)
 	- n_layers = n_c + n_s
-	- n_out = nombre de neurones de sortie = N_b[-1]
+	- n_out = N_b[-1]
 
-Ce fichier est autonome: aucune dépendance vers d'autres modules.
+Point d'entrée principal
+	La classe `mon_reso` expose :
+		- `cree_reso()` : génère un `struct_reso`
+		- `Affiche_reso()` : imprime les paramètres (style affectations)
+		- `set_reso()` : injecte X/W/B/D fournis dans une structure existante
 """
 
 from __future__ import annotations
@@ -27,10 +39,11 @@ from typing import Dict, List, Tuple
 class mon_reso:
 	"""Réseau (structure) configurable.
 
-	La classe s'initialise avec:
-		n_in, n_c, n_s, N_b, biais, poids, X, D
+	Cette classe ne fait *pas* d'apprentissage :
+		- elle génère et manipule la structure `struct_reso` (noms + valeurs)
+		- elle fournit l'affichage au format attendu par le laboratoire
 
-	Les fonctions cree_reso, Affiche_reso, set_reso appartiennent à la classe.
+	Les calculs (forward/backprop) sont réalisés dans `backpp.py`.
 	"""
 
 	# ==================== __init__ =========================
