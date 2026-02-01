@@ -112,6 +112,7 @@ FONT_BUTTON = None
 FONT_RADIO = None
 
 
+# ==================== _enable_windows_dpi_awareness =========================
 def _enable_windows_dpi_awareness() -> None:
 	"""Active le DPI-aware sous Windows pour éviter le texte flou."""
 	if sys.platform != "win32":
@@ -126,6 +127,7 @@ def _enable_windows_dpi_awareness() -> None:
 			pass
 
 
+# ==================== apply_theme =========================
 def apply_theme() -> None:
 	"""Applique le thème global CustomTkinter.
 
@@ -137,6 +139,7 @@ def apply_theme() -> None:
 	_enable_windows_dpi_awareness()
 
 
+# ==================== init_fonts =========================
 def init_fonts() -> None:
 	"""Initialise les polices.
 
@@ -157,6 +160,7 @@ def init_fonts() -> None:
 	FONT_RADIO = ctk.CTkFont(family=FONT_FAMILY, size=12)
 
 
+# ==================== center_window =========================
 def center_window(window, width: int | None = None, height: int | None = None) -> None:
 	"""Centre une fenêtre Tk/CTk sur l'écran.
 

@@ -16,27 +16,22 @@ Notes
 	Les fonctions sont volontairement simples et sans dépendances externes.
 """
 
-###################################
-###  fonction complementaire 1  ###
-###################################
-
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Sequence
 
-try:
-	from lab1 import layout  # import via package si disponible
-except Exception:
-	import layout  # fallback local
+from . import layout
 
 
+# ==================== read_parametres_text =========================
 def read_parametres_text(parametres_path: str | Path | None = None) -> str:
 	"""Lit `parametres.txt` et retourne tout le contenu en un bloc.
 
 	- Par défaut, lit `lab1/parametres.txt`.
 	- Retourne une chaîne vide si le fichier n'existe pas.
 	"""
+	# Chemin par défaut: fichier de configuration dans le même dossier que ce module.
 	default_path = Path(__file__).with_name("parametres.txt")
 	path = Path(parametres_path) if parametres_path is not None else default_path
 	try:
@@ -48,6 +43,7 @@ def read_parametres_text(parametres_path: str | Path | None = None) -> str:
 		return ""
 
 
+# ==================== add_parametres_line =========================
 def add_parametres_line(
 	formatted_line: str,
 	parametres_path: str | Path | None = None,
@@ -66,6 +62,7 @@ def add_parametres_line(
 	except Exception as exc:
 		return False, f"Format invalide: {exc}"
 
+	# Chemin par défaut: fichier de configuration dans le même dossier que ce module.
 	default_path = Path(__file__).with_name("parametres.txt")
 	path = Path(parametres_path) if parametres_path is not None else default_path
 
@@ -90,6 +87,7 @@ def add_parametres_line(
 		return False, f"Erreur d'écriture: {exc}"
 
 
+# ==================== delete_parametres_line =========================
 def delete_parametres_line(
 	raw_line: str,
 	parametres_path: str | Path | None = None,
@@ -103,6 +101,7 @@ def delete_parametres_line(
 	if not needle:
 		return False, "Ligne vide"
 
+	# Chemin par défaut: fichier de configuration dans le même dossier que ce module.
 	default_path = Path(__file__).with_name("parametres.txt")
 	path = Path(parametres_path) if parametres_path is not None else default_path
 	if not path.exists():
@@ -132,6 +131,7 @@ def delete_parametres_line(
 		return False, f"Erreur de suppression: {exc}"
 
 
+# ==================== _extract_bracket_groups =========================
 def _extract_bracket_groups(text: str) -> list[str]:
 	"""Extrait les groupes `[...]` de premier niveau d'une ligne.
 
@@ -164,6 +164,7 @@ def _extract_bracket_groups(text: str) -> list[str]:
 	return groups
 
 
+# ==================== _parse_int_list =========================
 def _parse_int_list(text: str) -> list[int] | None:
 	"""Parse une liste d'entiers depuis un texte (ex: "2, 3" / "[2,3]")."""
 	raw = (text or "").strip()
@@ -182,6 +183,7 @@ def _parse_int_list(text: str) -> list[int] | None:
 		return None
 
 
+# ==================== validate_parametres_line_new_format =========================
 def validate_parametres_line_new_format(line: str) -> None:
 	"""Valide strictement une ligne parametres.txt selon le nouveau format.
 
@@ -220,11 +222,7 @@ def validate_parametres_line_new_format(line: str) -> None:
 		raise ValueError("nb_neurones: toutes les valeurs doivent être ≥ 1")
 
 
-###################################
-###  fonction complementaire 2  ###
-###################################
-
-
+# ==================== fonction_max =========================
 def fonction_max(valeurs: Sequence[float]) -> list[int]:
 	"""Convertit une liste analogique en liste binaire (0/1) via la règle MAX.
 

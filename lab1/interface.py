@@ -18,11 +18,9 @@ Note:
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
 import random
 from pathlib import Path
+import sys
 import tkinter.ttk as ttk
 import tkinter.font as tkfont
 import tkinter.messagebox as messagebox
@@ -31,10 +29,9 @@ import customtkinter as ctk
 
 # Les constantes de mise en forme (couleurs, fonts, paddings, tailles) sont
 # centralisées dans `layout.py` pour éviter la duplication entre fichiers.
-try:
-	from lab1 import layout  # import via package si disponible
-except Exception:
-	import layout  # fallback local
+# Le module est conçu pour être exécuté/importé comme package.
+# Exécution recommandée: `python -m lab1.lanceur`.
+from . import layout
 
 
 layout.apply_theme()
@@ -45,6 +42,36 @@ LAB1_ROOT = Path(__file__).resolve().parent
 class HMIApp(ctk.CTk):
 	"""Fenêtre principale de l'interface."""
 	SCORE_KEYS = {"score_attendu", "score_obtenu"}
+
+	def _set_form_lock_for_mode(self, mode: str) -> None:
+		"""Verrouille/déverrouille les champs selon le mode.
+
+		Exigence option 2 (Test général):
+		- toutes les cases sont verrouillées
+		- modification seulement via sélection dans le tableau
+		"""
+		mode_s = str(mode or "").strip()
+		lock = mode_s == "Test général"
+
+		# Entrées: en Test général on désactive tout.
+		# Hors Test général on réactive tout, sauf les champs explicitement read-only.
+		always_disabled = {"iterations"}
+		if hasattr(self, "entries"):
+			for key, entry in self.entries.items():
+				try:
+					if lock or key in always_disabled:
+						entry.configure(state="disabled")
+					else:
+						entry.configure(state="normal")
+				except Exception:
+					pass
+
+		# Dropdown activation: verrouillé en Test général (doit venir du tableau).
+		try:
+			if hasattr(self, "act_menu"):
+				self.act_menu.configure(state=("disabled" if lock else "normal"))
+		except Exception:
+			pass
 
 	def _apply_startup_defaults(self) -> None:
 		"""Applique les valeurs par défaut fournies au démarrage (si présentes)."""
@@ -113,8 +140,22 @@ class HMIApp(ctk.CTk):
 		entry = self.entries.get(key)
 		if entry is None:
 			return
+		# Certains champs peuvent être en lecture seule (state="disabled").
+		# On les active temporairement pour permettre les mises à jour internes.
+		try:
+			prev_state = entry.cget("state")
+			had_disabled = str(prev_state).lower() == "disabled"
+			if had_disabled:
+				entry.configure(state="normal")
+		except Exception:
+			had_disabled = False
 		entry.delete(0, "end")
 		entry.insert(0, text)
+		if had_disabled:
+			try:
+				entry.configure(state="disabled")
+			except Exception:
+				pass
 
 	def _format_score_percent(self, raw: object) -> str:
 		"""Normalise un score pour affichage en pourcentage (ex: "60% ").
@@ -398,10 +439,7 @@ class HMIApp(ctk.CTk):
 		"""Charge toutes les lignes de `parametres.txt` dans le tableau."""
 		self._clear_table_rows()
 		# Validation stricte: seules les lignes au nouveau format sont affichées.
-		try:
-			from lab1 import service  # type: ignore
-		except Exception:
-			import service  # type: ignore
+		from . import service
 		invalid_count = 0
 		invalid_examples: list[str] = []
 		# Conserve la correspondance item_id -> ligne brute pour la suppression.
@@ -970,6 +1008,11 @@ class HMIApp(ctk.CTk):
 		)
 
 		iter_entry = self._make_entry(lower_grid)
+		# Exigence: i (iterations) ne doit pas être modifiable manuellement.
+		try:
+			iter_entry.configure(state="disabled")
+		except Exception:
+			pass
 		iter_entry.grid(
 			row=0,
 			column=4,
@@ -1198,6 +1241,12 @@ class HMIApp(ctk.CTk):
 		except Exception:
 			pass
 
+		# Exigence option 2: verrouillage des champs en mode Test général.
+		try:
+			self._set_form_lock_for_mode(self.mode_var.get())
+		except Exception:
+			pass
+
 	# ==================== _on_set_config =========================
 	def _on_set_config(self) -> None:
 		"""Mode Apprentissage: valide + formalise, puis délègue l'écriture à `service` via le lanceur."""
@@ -1286,10 +1335,7 @@ class HMIApp(ctk.CTk):
 			return
 
 		# Fallback: si aucun callback n'est fourni, on tente d'écrire directement via service.
-		try:
-			from lab1 import service  # type: ignore
-		except Exception:
-			import service  # type: ignore
+		from . import service
 		ok, msg = service.add_parametres_line(formatted_line)
 		if ok:
 			self.load_parametres_text(service.read_parametres_text())
@@ -1372,6 +1418,21 @@ class HMIApp(ctk.CTk):
 	# ==================== _on_execute =========================
 	def _on_execute(self) -> None:
 		"""Valide les champs puis délègue l'exécution au lanceur."""
+		mode_selected = self.mode_var.get() if hasattr(self, "mode_var") else "-"
+		selected_raw_line = None
+		try:
+			if hasattr(self, "table_tree"):
+				selected = self.table_tree.selection()
+				if selected:
+					selected_raw_line = getattr(self, "table_raw_lines", {}).get(selected[0])
+		except Exception:
+			selected_raw_line = None
+
+		# Option 2: si Test général, l'utilisateur doit choisir une config du tableau.
+		if mode_selected == "Test général" and not (selected_raw_line and str(selected_raw_line).strip()):
+			messagebox.showerror(layout.UI_DIALOG_ERROR, "Veuillez sélectionner une configuration dans le tableau")
+			return
+
 		try:
 			values = self._validate_entries()
 		except ValueError as exc:
@@ -1396,13 +1457,14 @@ class HMIApp(ctk.CTk):
 			return
 
 		activation = self.act_var.get() if hasattr(self, "act_var") else "-"
-		mode_selected = self.mode_var.get() if hasattr(self, "mode_var") else "-"
 		payload = {
 			"mode": mode_selected,
 			"activation": activation,
 			"values": values,
 			"N_b": N_b_full,
 			"test_unitaire": bool(mode_selected == "Test unitaire"),
+			# Permet au lanceur de retrouver Wn_c/Bn_c exacts dans parametres.txt.
+			"selected_raw_line": (str(selected_raw_line).strip() if selected_raw_line else ""),
 		}
 
 		if callable(getattr(self, "on_execute", None)):

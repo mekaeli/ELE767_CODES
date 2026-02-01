@@ -37,14 +37,11 @@ Ce dossier contient le laboratoire 1:
 3) Exécution
 ------------
 A) Lancer l'interface graphique
-	- Depuis la racine du workspace:
+	- Commande:
 		python -m lab1.lanceur
-	
-	- Alternativement:
-		python lab1/lanceur.py
 
 B) Lancer les smoke tests (sans GUI)
-	- Depuis la racine du workspace:
+	- Commande:
 		python -m lab1.smoke_test
 
 

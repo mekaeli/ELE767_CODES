@@ -5,7 +5,7 @@ Contient la logique de conversion des fichiers de données vers une taille fixe.
 Ce module provient de l'ancien `loader.py` (déplacé ici pour mieux refléter son rôle).
 
 Usage:
-    python lab1/data/file_concerter.py
+	python -m lab1.data.file_concerter
 
 Options:
   --train/--vc/--test : chemins des fichiers d'entrée
@@ -19,10 +19,12 @@ import argparse
 from pathlib import Path
 
 
+# ==================== _is_label_token =========================
 def _is_label_token(token: str) -> bool:
     return bool(token) and token.endswith(":") and token[:-1].isdigit()
 
 
+# ==================== _detect_coeffs_per_frame =========================
 def _detect_coeffs_per_frame(n_values: int) -> int | None:
     """Tente de déduire C (coeffs par trame)."""
     for c in (39, 26, 13):
@@ -31,6 +33,7 @@ def _detect_coeffs_per_frame(n_values: int) -> int | None:
     return None
 
 
+# ==================== _energy_index =========================
 def _energy_index(c: int, energy_kind: str) -> int | None:
     """Retourne l'index de l'énergie dans une trame (0-based), selon C."""
     kind = (energy_kind or "").strip().lower()
@@ -45,6 +48,7 @@ def _energy_index(c: int, energy_kind: str) -> int | None:
     return None
 
 
+# ==================== _parse_dataset_line =========================
 def _parse_dataset_line(line: str) -> tuple[int, list[float]] | None:
     s = (line or "").strip()
     if not s:
@@ -65,6 +69,7 @@ def _parse_dataset_line(line: str) -> tuple[int, list[float]] | None:
     return label, values
 
 
+# ==================== _select_frames_by_energy =========================
 def _select_frames_by_energy(values: list[float], *, n_keep: int, energy_kind: str) -> list[list[float]]:
     """Convertit une ligne (flatten) en trames, sélectionne n_keep par énergie."""
     c = _detect_coeffs_per_frame(len(values))
@@ -95,6 +100,7 @@ def _select_frames_by_energy(values: list[float], *, n_keep: int, energy_kind: s
     return selected
 
 
+# ==================== convert_line_to_static40 =========================
 def convert_line_to_static40(values: list[float], *, n_keep: int = 40, energy_kind: str = "Es") -> list[float]:
     """Pipeline: selection énergie → N trames → garder 12 statiques → flatten (N*12)."""
     frames = _select_frames_by_energy(values, n_keep=n_keep, energy_kind=energy_kind)
@@ -105,6 +111,7 @@ def convert_line_to_static40(values: list[float], *, n_keep: int = 40, energy_ki
     return out
 
 
+# ==================== convert_file =========================
 def convert_file(
     in_path: str | Path,
     *,
@@ -139,6 +146,7 @@ def convert_file(
     return n_rows, n_cols
 
 
+# ==================== main =========================
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convertit data_*.txt en N trames (sélection par énergie) + 12 statiques")
     # Par défaut, on cherche les fichiers dans le même dossier que ce script.

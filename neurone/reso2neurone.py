@@ -1167,6 +1167,10 @@ class backpp:
 		self._print_step("Sortie")
 		L = len(a_list)
 		# Convention d'affichage: a<rang>_<couche>
+		Y_mat = [[float(v)] for v in y]
+		Y_row_labels = [f"a{j + 1}_{L}" for j in range(len(y))]
+		print(f"Y (matrice) = {self._fmt_mat_no_header(Y_mat, precision, row_labels=Y_row_labels)}")
+		print(f"y (liste) = {self._fmt_vec(y, precision)}")
 		if len(y) == 1:
 			print(f"y: a1_{L} = [{self._fmt(y[0], precision)}]")
 		else:

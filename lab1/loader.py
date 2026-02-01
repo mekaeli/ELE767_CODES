@@ -1,18 +1,70 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 import random
 
 
+# ==================== convert_label =========================
+def convert_label(label: int, nb_sorties: int) -> list[int]:
+	"""Convertit un label en vecteur binaire (one-hot) de taille `nb_sorties`.
+
+	Cas spécial (nb_sorties=10, chiffres):
+	- ordre des classes = 1,2,3,4,5,6,7,8,9,0
+	  donc 0 est encodé sur la dernière position.
+
+	Sinon (générique):
+	- accepte des labels 0..nb_sorties-1 (0-based)
+	- accepte aussi 1..nb_sorties (1-based)
+	- si le label est hors plage, applique un mapping modulo (lab % nb_sorties)
+	  pour forcer l'encodage dans la taille demandée.
+	"""
+	try:
+		lab = int(label)
+		n_out = int(nb_sorties)
+	except Exception as exc:
+		raise ValueError(
+			f"arguments invalides: label={label!r}, nb_sorties={nb_sorties!r}"
+		) from exc
+
+	if n_out <= 0:
+		raise ValueError("nb_sorties doit être >= 1")
+
+	# Cas digits: nb_sorties=10, classes {1..9,0}
+	if n_out == 10:
+		if not (0 <= lab <= 9):
+			raise ValueError(
+				"label invalide pour nb_sorties=10 (attendu un chiffre 0..9)"
+			)
+		vec = [0] * 10
+		idx = 9 if lab == 0 else (lab - 1)
+		vec[idx] = 1
+		return vec
+
+	# Cas générique: 0-based prioritaire
+	if 0 <= lab < n_out:
+		idx = lab
+	elif 1 <= lab <= n_out:
+		idx = lab - 1
+	else:
+		# Exigence: ne pas lever d'erreur, mais replier via modulo.
+		# Exemple: label=8, nb_sorties=5 -> idx=8%5=3.
+		idx = int(lab) % int(n_out)
+
+	vec = [0] * n_out
+	vec[idx] = 1
+	return vec
+
+
+# ==================== _parse_dataset_line =========================
 def _parse_dataset_line(
 	line: str,
 	*,
 	n_in: int,
 	nb_sorties: int,
-	convert_label: Callable[[int, int], list[int]],
+	convert_label: Callable[[int, int], list[int]] = convert_label,
 ) -> tuple[list[int], list[float]]:
 	"""Parse une ligne de dataset `label: x1 x2 ...` -> (Dn_s, Xn)."""
 	use_n_in = int(n_in)
@@ -47,6 +99,7 @@ def _parse_dataset_line(
 	return Dn_s, Xn
 
 
+# ==================== resolve_validation_file =========================
 def resolve_validation_file(
 	n_in: int,
 	*,
@@ -78,6 +131,7 @@ def resolve_validation_file(
 
 
 @lru_cache(maxsize=32)
+# ==================== _read_non_empty_lines_cached =========================
 def _read_non_empty_lines_cached(file_path_str: str) -> tuple[str, ...]:
 	"""Lit et met en cache les lignes non vides d'un fichier.
 
@@ -94,136 +148,106 @@ def _read_non_empty_lines_cached(file_path_str: str) -> tuple[str, ...]:
 	return tuple(lines)
 
 
+# ==================== count_non_empty_lines =========================
 def count_non_empty_lines(file_path: Path) -> int:
 	"""Compte le nombre de lignes non vides (strip) dans un fichier."""
 	return len(_read_non_empty_lines_cached(str(Path(file_path))))
 
 
-def get_validation_sample_at(
+# ==================== get_validation_sample_seq =========================
+def get_validation_sample_seq(
 	file_path: Path,
 	*,
-	i: int,
+	n_ligne: int,
 	n_in: int,
 	nb_sorties: int,
-	convert_label: Callable[[int, int], list[int]],
-) -> tuple[bool, list[int] | None, list[float] | None]:
-	"""Retourne l'exemple (Dn_s, Xn) à l'index `i` (0-based).
+	convert_label: Callable[[int, int], list[int]] = convert_label,
+) -> tuple[list[list[int]], list[list[float]]]:
+	"""Retourne l'exemple à la ligne `n_ligne` sous forme de listes (D_list, X_list).
 
-	- Si `i` existe: retourne (True, Dn_s, Xn)
-	- Sinon: retourne (False, None, None)
+	Spécification
+	- Reçoit `n_ligne`: numéro de la ligne à lire (1-based)
+	- Valide `n_ligne`
+	- Retourne uniquement (D_list, X_list)
 
-	Les lignes vides sont ignorées (donc `i` est l'index parmi les lignes non vides).
+	Notes
+	- Les lignes vides sont ignorées (donc `n_ligne` compte parmi les lignes non vides).
+	- (D_list, X_list) contiennent chacun un seul élément.
 	"""
-	idx = int(i)
-	if idx < 0:
-		return False, None, None
+	try:
+		idx_1 = int(n_ligne)
+	except Exception as exc:
+		raise ValueError(f"n_ligne invalide: {n_ligne!r}") from exc
+
+	if idx_1 < 1:
+		raise ValueError("n_ligne doit être >= 1")
 
 	lines = _read_non_empty_lines_cached(str(Path(file_path)))
-	if idx >= len(lines):
-		return False, None, None
+	if idx_1 > len(lines):
+		raise ValueError(
+			f"n_ligne hors plage: {idx_1} (attendu 1..{len(lines)})"
+		)
 
-	line = lines[idx]
+	line = lines[idx_1 - 1]
 	Dn_s, Xn = _parse_dataset_line(
 		line,
 		n_in=n_in,
 		nb_sorties=nb_sorties,
 		convert_label=convert_label,
 	)
-	return True, Dn_s, Xn
+	return [Dn_s], [Xn]
 
 
-def iter_validation_samples_cached(
+# ==================== _load_all_samples_cached =========================
+def _load_all_samples_cached(
 	file_path: Path,
 	*,
 	n_in: int,
 	nb_sorties: int,
-	convert_label: Callable[[int, int], list[int]],
-) -> Iterator[tuple[list[int], list[float]]]:
-	"""Itère sur les exemples (Dn_s, Xn) via le cache mémoire (lignes non vides).
-
-	Utile quand on veut faire plusieurs passes sur le même fichier sans le relire.
-	"""
+	convert_label: Callable[[int, int], list[int]] = convert_label,
+) -> tuple[list[list[int]], list[list[float]]]:
+	"""Charge toutes les lignes non vides via le cache et retourne (D_list, X_list)."""
+	D_list: list[list[int]] = []
+	X_list: list[list[float]] = []
 	lines = _read_non_empty_lines_cached(str(Path(file_path)))
 	for line in lines:
-		yield _parse_dataset_line(
+		Dn_s, Xn = _parse_dataset_line(
 			line,
 			n_in=n_in,
 			nb_sorties=nb_sorties,
 			convert_label=convert_label,
 		)
-
-
-def iter_validation_samples(
-	file_path: Path,
-	*,
-	n_in: int,
-	nb_sorties: int,
-	convert_label: Callable[[int, int], list[int]],
-) -> Iterator[tuple[list[int], list[float]]]:
-	"""Itère sur les exemples (Dn_s, Xn) d'un fichier `*_data_vc.txt`.
-
-	Format de ligne attendu: `label: x1 x2 ...`.
-	- `Dn_s` est un one-hot obtenu via `convert_label(label, nb_sorties)`
-	- `Xn` est une liste de floats, tronquée à `n_in`
-	"""
-	with open(file_path, "r", encoding="utf-8") as f:
-		for raw_line in f:
-			line = (raw_line or "").strip()
-			if not line:
-				continue
-			yield _parse_dataset_line(
-				line,
-				n_in=n_in,
-				nb_sorties=nb_sorties,
-				convert_label=convert_label,
-			)
-
-
-def load_validation_samples(
-	file_path: Path,
-	*,
-	n_in: int,
-	nb_sorties: int,
-	convert_label: Callable[[int, int], list[int]],
-) -> tuple[int, list[list[int]], list[list[float]]]:
-	"""Lit séquentiellement le fichier et retourne (n_lignes, D_list, X_list)."""
-	D_list: list[list[int]] = []
-	X_list: list[list[float]] = []
-	for Dn_s, Xn in iter_validation_samples(
-		file_path,
-		n_in=n_in,
-		nb_sorties=nb_sorties,
-		convert_label=convert_label,
-	):
 		D_list.append(Dn_s)
 		X_list.append(Xn)
-	return len(D_list), D_list, X_list
+	return D_list, X_list
 
 
-def load_validation_samples_random(
+# ==================== get_validation_samples_random =========================
+def get_validation_samples_random(
 	file_path: Path,
 	*,
 	n_in: int,
 	nb_sorties: int,
-	convert_label: Callable[[int, int], list[int]],
+	convert_label: Callable[[int, int], list[int]] = convert_label,
 	seed: int | None = None,
-) -> tuple[int, list[list[int]], list[list[float]]]:
-	"""Lit les mêmes données que `load_validation_samples`, mais en ordre aléatoire.
+
+) -> tuple[list[list[int]], list[list[float]]]:
+	"""Lit les données de validation en ordre aléatoire et retourne (D_shuffled, X_shuffled).
 
 	Propriété importante
 	- Contenu identique à la lecture séquentielle: les couples (Dn_s, Xn) sont
 	  strictement les mêmes, seul l'ordre change.
 	- Si `seed` est fourni, l'ordre est déterministe/reproductible.
 	"""
-	n, D_list, X_list = load_validation_samples(
+	D_list, X_list = _load_all_samples_cached(
 		file_path,
 		n_in=n_in,
 		nb_sorties=nb_sorties,
 		convert_label=convert_label,
 	)
-	indices = list(range(n))
+	indices = list(range(len(D_list)))
 	rng = random.Random(seed)
 	rng.shuffle(indices)
 	D_shuffled = [D_list[i] for i in indices]
 	X_shuffled = [X_list[i] for i in indices]
-	return n, D_shuffled, X_shuffled
+	return D_shuffled, X_shuffled

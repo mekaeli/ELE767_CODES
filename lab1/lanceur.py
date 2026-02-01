@@ -19,46 +19,41 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import ast
 import copy
 import os
+import sys
 import unicodedata
 
+# Le module est conçu pour être utilisé comme package.
+# Exécution recommandée: `python -m lab1.lanceur`.
 
-# Racine des fichiers d'entrée (datasets / data_*.txt)
-root = Path(__file__).resolve().parent / "data"
-
-
-ACTIVATION_TO_N_FCT: dict[str, int] = {
-	"sigmoide": 1,
-	"tan": 2,
-	"tanh": 3,
-	"gelu": 4,
-}
-
-
-def _normalize_activation(value: object) -> str:
-	"""Normalise un libellé d'activation (lower + sans accents)."""
-	s = str(value or "").strip().lower()
-	# Décompose les accents puis les enlève.
-	s = unicodedata.normalize("NFKD", s)
-	s = "".join(ch for ch in s if not unicodedata.combining(ch))
-	return s
-
-
+# ==================== _env_int =========================
 def _env_int(name: str, default: int) -> int:
+	"""Lit un entier depuis les variables d'environnement.
+
+	- Si la variable n'existe pas ou est invalide, retourne `default`.
+	"""
 	try:
 		return int(os.environ.get(name, str(default)).strip())
 	except Exception:
 		return default
 
 
+# ==================== _env_float =========================
 def _env_float(name: str, default: float) -> float:
+	"""Lit un float depuis les variables d'environnement.
+
+	- Accepte la virgule comme séparateur décimal.
+	- Si la variable n'existe pas ou est invalide, retourne `default`.
+	"""
 	try:
 		return float(os.environ.get(name, str(default)).strip().replace(",", "."))
 	except Exception:
 		return default
 
 
+# ==================== _env_bool =========================
 def _env_bool(name: str, default: bool) -> bool:
 	"""Lit un booléen depuis l'environnement.
 
@@ -78,48 +73,6 @@ def _env_bool(name: str, default: bool) -> bool:
 		return bool(default)
 
 
-def convert_label(label: int, nb_sorties: int) -> list[int]:
-	"""Convertit un label en vecteur binaire (one-hot) de taille `nb_sorties`.
-
-	Cas spécial (image fournie, nb_sorties=10, chiffres):
-	- ordre des classes = 1,2,3,4,5,6,7,8,9,0
-	  donc 0 est encodé sur la dernière position.
-
-	Sinon (générique):
-	- accepte des labels 0..nb_sorties-1 (0-based)
-	- accepte aussi 1..nb_sorties (1-based)
-	"""
-	try:
-		lab = int(label)
-		n_out = int(nb_sorties)
-	except Exception as exc:
-		raise ValueError(f"arguments invalides: label={label!r}, nb_sorties={nb_sorties!r}") from exc
-
-	if n_out <= 0:
-		raise ValueError("nb_sorties doit être >= 1")
-
-	# Cas digits (comme sur l'image): nb_sorties=10, classes {1..9,0}
-	if n_out == 10:
-		if not (0 <= lab <= 9):
-			raise ValueError("label invalide pour nb_sorties=10 (attendu un chiffre 0..9)")
-		vec = [0] * 10
-		idx = 9 if lab == 0 else (lab - 1)
-		vec[idx] = 1
-		return vec
-
-	# Cas générique: 0-based prioritaire
-	if 0 <= lab < n_out:
-		idx = lab
-	elif 1 <= lab <= n_out:
-		idx = lab - 1
-	else:
-		raise ValueError(f"label hors plage: {lab} (attendu 0..{n_out-1} ou 1..{n_out})")
-
-	vec = [0] * n_out
-	vec[idx] = 1
-	return vec
-
-
 @dataclass(frozen=True)
 class varEntryManuel:
 	"""Exemple de données manuelles au format attendu par `reso.set_reso()`.
@@ -131,26 +84,36 @@ class varEntryManuel:
 	- Dn_s : sortie(s) désirée(s)
 	- n_fct / eta : hyperparamètres
 	"""
-	
-	# 1) Entrées
-	x1: float = 1.0
-	x2: float = 0.0
+	# Garder les annotations de type: elles aident la lecture et l'auto-complétion.
 
-	# 2) Poids + biais (couche 1 : 2 -> 2)
-	w11_1: float = 3.0
-	w12_1: float = 4.0
-	w21_1: float = 6.0
-	w22_1: float = 5.0
-	b1_1: float = 1.0
-	b2_1: float = 0.0
+	# 1) Entrées (X)
+	x1: float = 2.0
+	x2: float = 4.0
 
-	# 3) Poids + biais (couche 2 : 2 -> 1)
-	w11_2: float = 2.0
-	w21_2: float = 4.0
-	b1_2: float = -3.92
+	# 2) Poids + biais (couche 1)
+	w11_1: float = 1.0
+	w12_1: float = 3.0
+	w21_1: float = 2.0
+	w22_1: float = 4.0
+	b1_1: float = 2.0
+	b2_1: float = 1.0
 
-	# 4) Sortie désirée
+	# 3) Poids + biais (couche 2)
+	w11_2: float = 0.3
+	w12_2: float = -0.2
+	w13_2: float = 0.2
+	w21_2: float = 1.3
+	w22_2: float = -0.4
+	w23_2: float = -1.2
+
+	b1_2: float = -0.1
+	b2_2: float = 0.1
+	b3_2: float = -1.2
+
+	# 4) Sorties désirées (D)
 	d1: float = 1.0
+	d2: float = 2.0
+	d3: float = 1.0
 
 	# 5) Hyperparamètres
 	n_fct: int = 1
@@ -172,20 +135,548 @@ class varEntryManuel:
 	@property
 	def Wn_c(self) -> list[list[float]]:
 		W1_aplatie = [self.w11_1, self.w12_1, self.w21_1, self.w22_1]
-		W2_aplatie = [self.w11_2, self.w21_2]
+		W2_aplatie = [self.w11_2, self.w12_2, self.w13_2, self.w21_2, self.w22_2, self.w23_2]
 		return [W1_aplatie, W2_aplatie]
 
 	@property
 	def Bn_c(self) -> list[list[float]]:
 		b1 = [self.b1_1, self.b2_1]
-		b2 = [self.b1_2]
+		b2 = [self.b1_2, self.b2_2, self.b3_2]
 		return [b1, b2]
 
 	@property
 	def Dn_s(self) -> list[float]:
-		return [self.d1]
+		return [self.d1, self.d2, self.d3]
 
 
+# ==================== _format_score_percent =========================
+def _format_score_percent(raw: object) -> str:
+	"""Normalise un score pour affichage/stockage en pourcentage (ex: "60% ")."""
+	s = str(raw).strip() if raw is not None else ""
+	if not s or s == "-":
+		return "-"
+	if s.endswith("%"):
+		return s.replace(" ", "")
+	try:
+		val = float(s.replace(",", "."))
+	except Exception:
+		return s
+	if abs(val - round(val)) < 1e-9:
+		return f"{int(round(val))}%"
+	formatted = f"{val:.2f}".rstrip("0").rstrip(".")
+	return f"{formatted}%"
+
+
+# ==================== _parse_score_ref =========================
+def _parse_score_ref(value: object) -> float:
+	"""Parse un score de référence en % (0..100).
+
+	Accepte: 60, 60.0, "60", "60%", " 60 % ".
+	"""
+	if value is None:
+		return 0.0
+	s = str(value).strip()
+	if not s or s == "-":
+		return 0.0
+	if s.endswith("%"):
+		s = s[:-1].strip()
+	try:
+		return float(s.replace(",", "."))
+	except Exception:
+		return 0.0
+
+
+# ==================== _ask_continue_apprentissage =========================
+def _ask_continue_apprentissage(message: str) -> bool:
+	"""Demande à l'utilisateur s'il veut continuer l'apprentissage (GUI).
+
+	Fallback: retourne False si la boîte de dialogue n'est pas disponible.
+	"""
+	try:
+		import tkinter.messagebox as messagebox
+
+		return bool(messagebox.askyesno("Apprentissage", message))
+	except Exception:
+		return False
+
+
+# ==================== _extract_bracket_groups =========================
+def _extract_bracket_groups(text: str) -> list[str]:
+	"""Extrait les groupes `[...]` de premier niveau d'une ligne.
+
+	Retourne les contenus sans les crochets externes.
+	"""
+	groups: list[str] = []
+	buf: list[str] = []
+	depth = 0
+	in_group = False
+	for ch in str(text or ""):
+		if ch == "[":
+			if depth == 0:
+				in_group = True
+				buf = []
+			else:
+				buf.append(ch)
+			depth += 1
+		elif ch == "]":
+			if depth == 0:
+				continue
+			depth -= 1
+			if depth == 0 and in_group:
+				groups.append("".join(buf).strip())
+				in_group = False
+			else:
+				buf.append(ch)
+		else:
+			if in_group:
+				buf.append(ch)
+	return groups
+
+
+# ==================== _parse_parametres_config_line =========================
+def _parse_parametres_config_line(raw_line: str) -> tuple[str, int, int, list[int], int, float, list[list[float]], list[list[float]], str]:
+	"""Parse une ligne complète de `parametres.txt` (nouveau format) et retourne:
+	(activation, nb_entrees, nb_couches, hidden_list, nb_sorties, eta, Wn_c, Bn_c, score).
+
+	Note: `hidden_list` = couches cachées uniquement (taille == nb_couches).
+	"""
+	s = (raw_line or "").strip()
+	if not s:
+		raise ValueError("ligne vide")
+	# En-tête
+	lower = s.lower()
+	if "nb d'entr" in lower and "eta" in lower and "poid" in lower:
+		raise ValueError("ligne d'en-tête")
+
+	groups = _extract_bracket_groups(s)
+	if len(groups) < 5:
+		raise ValueError("ligne illisible (groupes [] insuffisants)")
+	activation = groups[0].strip() or "-"
+	inner = _extract_bracket_groups(groups[1])
+	if len(inner) < 5:
+		raise ValueError("bloc [[...]] invalide (attendu 5 champs)")
+	try:
+		nb_entrees = int(inner[0].strip())
+		nb_couches = int(inner[1].strip())
+		nb_sorties = int(inner[3].strip())
+		eta = float(str(inner[4]).strip().replace(",", "."))
+	except Exception as exc:
+		raise ValueError(f"métadonnées invalides: {exc}") from exc
+
+	# nb_neurones (cachées)
+	hidden_raw = (inner[2] or "").strip().replace("[", "").replace("]", "")
+	if not hidden_raw:
+		hidden_list = []
+	else:
+		parts = [p.strip() for p in (hidden_raw.split(",") if "," in hidden_raw else hidden_raw.split()) if p.strip()]
+		hidden_list = [int(float(p.replace(",", "."))) for p in parts]
+	if len(hidden_list) != nb_couches:
+		raise ValueError("nb_neurones doit contenir exactement nb_couches valeurs")
+
+	# Wn_c et Bn_c sont aussi des groupes [] top-level dans la ligne.
+	# _extract_bracket_groups enlève les crochets externes, donc on les reconstitue.
+	try:
+		Wn_c = ast.literal_eval("[" + groups[2] + "]")
+		Bn_c = ast.literal_eval("[" + groups[3] + "]")
+	except Exception as exc:
+		raise ValueError(f"Wn_c/Bn_c illisibles: {exc}") from exc
+	if not isinstance(Wn_c, list) or not all(isinstance(layer, list) for layer in Wn_c):
+		raise ValueError("Wn_c invalide")
+	if not isinstance(Bn_c, list) or not all(isinstance(layer, list) for layer in Bn_c):
+		raise ValueError("Bn_c invalide")
+
+	Wn_c_f = [[float(v) for v in layer] for layer in Wn_c]
+	Bn_c_f = [[float(v) for v in layer] for layer in Bn_c]
+	return activation, nb_entrees, nb_couches, hidden_list, nb_sorties, float(eta), Wn_c_f, Bn_c_f, groups[-1].strip()
+
+
+# ==================== _check_WnBn_dimensions =========================
+def _check_WnBn_dimensions(*, nb_entrees: int, layer_sizes: list[int], Wn_c: list[list[float]], Bn_c: list[list[float]]) -> None:
+	"""Valide dimensions Wn_c/Bn_c pour une topologie (nb_entrees -> layer_sizes...)."""
+	if len(Wn_c) != len(layer_sizes) or len(Bn_c) != len(layer_sizes):
+		raise ValueError("Wn_c/Bn_c incompatibles avec la topologie")
+	prev = int(nb_entrees)
+	for idx, layer_size in enumerate(layer_sizes):
+		expected_w = prev * int(layer_size)
+		if len(Wn_c[idx]) != expected_w:
+			raise ValueError(f"Dimension invalide pour Wn_c[{idx}] (attendu {expected_w})")
+		if len(Bn_c[idx]) != int(layer_size):
+			raise ValueError(f"Dimension invalide pour Bn_c[{idx}] (attendu {layer_size})")
+		prev = int(layer_size)
+
+
+# ==================== test_general_option2 =========================
+def test_general_option2(
+	struct_reso: dict[str, object],
+	Wn_c: list[list[float]],
+	Bn_c: list[list[float]],
+	n_in: int,
+	*,
+	eta: float = 0.1,
+	n_fct: int = 1,
+	root_dir: Path | None = None,
+) -> tuple[float, int, int, int]:
+	"""Option 2: Test général sur `n_in_data_test.txt`.
+
+	- Boucle sur toutes les lignes du fichier de test.
+	- Compare Dn_s vs Dn_snew (one-hot max).
+	- Affiche OK/NOK/taille/Score et retourne le %.
+	"""
+	from .reseau import mon_reso
+	from .backpp import backpp
+	from . import loader, service
+
+	use_n_in_selector = int(n_in)
+	if use_n_in_selector not in {40, 50, 60}:
+		raise ValueError("Aucun ficher correspondante n_in (attendu 40/50/60)")
+
+	# Déduit n_in (dimension réelle) et nb_sorties depuis struct_reso.
+	key_x = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("X")), None)
+	key_b = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("B")), None)
+	key_d = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("D")), None)
+	if key_x is None or key_b is None or key_d is None:
+		raise ValueError("struct_reso invalide: clés X/B/D manquantes")
+	try:
+		use_n_in_features = int(str(key_x)[1:])
+	except Exception as exc:
+		raise ValueError(f"struct_reso invalide: clé X inattendue: {key_x!r}") from exc
+
+	D_pairs = struct_reso.get(key_d)
+	if not isinstance(D_pairs, list):
+		raise ValueError("struct_reso invalide: D doit être une liste")
+	use_nb_sorties = len(D_pairs)
+	if use_nb_sorties <= 0:
+		raise ValueError("struct_reso invalide: nb_sorties <= 0")
+
+	B_layers = struct_reso.get(key_b)
+	if not isinstance(B_layers, list) or any(not isinstance(layer, list) for layer in B_layers):
+		raise ValueError("struct_reso invalide: B doit être une liste de listes")
+	N_b = [len(layer) for layer in B_layers]
+	if not N_b or any(n <= 0 for n in N_b):
+		raise ValueError("struct_reso invalide: dimensions B invalides")
+
+	# Sanity dimensions W/B selon topologie
+	_check_WnBn_dimensions(nb_entrees=use_n_in_features, layer_sizes=N_b, Wn_c=Wn_c, Bn_c=Bn_c)
+
+	use_root_dir = root if root_dir is None else Path(root_dir)
+	file_path = use_root_dir / f"{use_n_in_selector}_data_test.txt"
+	if not file_path.exists():
+		raise FileNotFoundError(f"Fichier introuvable: {file_path}")
+
+	taille = loader.count_non_empty_lines(file_path)
+	if taille <= 0:
+		pct = 0.0
+		print(f"OK=0 | NOK=0 | taille=0 | Score={pct:.2f}%")
+		return pct, 0, 0, 0
+
+	# Instancie mon_reso uniquement pour set_reso
+	n_layers = len(N_b)
+	use_n_s = 1
+	use_n_c = max(0, n_layers - use_n_s)
+	r = mon_reso(
+		n_in=use_n_in_features,
+		n_c=use_n_c,
+		n_s=use_n_s,
+		N_b=N_b,
+		biais=[0.0, 0.0],
+		poids=[0.0, 0.0],
+		X=[0, 1],
+		D=[0, 1],
+		seed=None,
+	)
+
+	bp = backpp(copy.deepcopy(struct_reso), n_fct=int(n_fct), eta=float(eta))
+	n_ok = 0
+	n_nok = 0
+
+	for n_ligne in range(1, taille + 1):
+		D_list, X_list = loader.get_validation_sample_seq(
+			file_path,
+			n_ligne=n_ligne,
+			n_in=use_n_in_features,
+			nb_sorties=use_nb_sorties,
+		)
+		Dn_s_local = D_list[0]
+		Xn_local = X_list[0]
+		bp.struct_reso = r.set_reso(bp.struct_reso, Xn_local, Wn_c, Bn_c, Dn_s_local)
+		y = bp.forward(n_fct=int(n_fct))
+		Dn_snew = service.fonction_max(y)
+		if Dn_snew == Dn_s_local:
+			n_ok += 1
+		else:
+			n_nok += 1
+
+	total = n_ok + n_nok
+	pct = 0.0 if total == 0 else (100.0 * n_ok / total)
+	print(f"OK={n_ok} | NOK={n_nok} | taille={taille} | Score={pct:.2f}%")
+	return pct, n_ok, n_nok, int(taille)
+
+
+# ==================== _extract_struct_meta =========================
+def _extract_struct_meta(struct_reso: dict[str, object]) -> tuple[int, int, list[int]]:
+	"""Retourne (n_in_features, nb_sorties, N_b) depuis struct_reso."""
+	key_x = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("X")), None)
+	key_b = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("B")), None)
+	key_d = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("D")), None)
+	if key_x is None or key_b is None or key_d is None:
+		raise ValueError("struct_reso invalide: clés X/B/D manquantes")
+	try:
+		n_in_features = int(str(key_x)[1:])
+	except Exception as exc:
+		raise ValueError(f"struct_reso invalide: clé X inattendue: {key_x!r}") from exc
+
+	D_pairs = struct_reso.get(key_d)
+	if not isinstance(D_pairs, list):
+		raise ValueError("struct_reso invalide: D doit être une liste")
+	nb_sorties = len(D_pairs)
+	if nb_sorties <= 0:
+		raise ValueError("struct_reso invalide: nb_sorties <= 0")
+
+	B_layers = struct_reso.get(key_b)
+	if not isinstance(B_layers, list) or any(not isinstance(layer, list) for layer in B_layers):
+		raise ValueError("struct_reso invalide: B doit être une liste de listes")
+	N_b = [len(layer) for layer in B_layers]
+	if not N_b or any(n <= 0 for n in N_b):
+		raise ValueError("struct_reso invalide: dimensions B invalides")
+	return n_in_features, nb_sorties, N_b
+
+
+# ==================== _extract_Wn_c_Bn_c =========================
+def _extract_Wn_c_Bn_c(struct_reso: dict[str, object]) -> tuple[list[list[float]], list[list[float]]]:
+	"""Extrait Wn_c/Bn_c (valeurs) depuis struct_reso."""
+	key_w = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("W")), None)
+	key_b = next((k for k in struct_reso.keys() if isinstance(k, str) and k.startswith("B")), None)
+	if key_w is None or key_b is None:
+		raise ValueError("struct_reso invalide: clés W/B manquantes")
+
+	W_layers = struct_reso.get(key_w)
+	B_layers = struct_reso.get(key_b)
+	if not isinstance(W_layers, list) or not isinstance(B_layers, list):
+		raise ValueError("struct_reso invalide: W/B doivent être des listes")
+
+	Wn_c: list[list[float]] = []
+	Bn_c: list[list[float]] = []
+	for layer in W_layers:
+		if not isinstance(layer, list):
+			raise ValueError("struct_reso invalide: W doit être une liste de listes")
+		Wn_c.append([float(v) for _name, v in layer])  # type: ignore[misc]
+	for layer in B_layers:
+		if not isinstance(layer, list):
+			raise ValueError("struct_reso invalide: B doit être une liste de listes")
+		Bn_c.append([float(v) for _name, v in layer])  # type: ignore[misc]
+	return Wn_c, Bn_c
+
+
+# ==================== _format_parametres_line_for_current_run =========================
+def _format_parametres_line_for_current_run(
+	*,
+	activation: str,
+	nb_entrees: int,
+	nb_couches: int,
+	hidden_list: list[int],
+	nb_sorties: int,
+	eta: float,
+	Wn_c: list[list[float]],
+	Bn_c: list[list[float]],
+	score_attendu: object,
+) -> str:
+	"""Construit une ligne parametres.txt (nouveau format) pour la sauvegarde."""
+	hidden_str = ", ".join(str(int(v)) for v in hidden_list)
+	score = _format_score_percent(score_attendu)
+	return (
+		f"[{activation}] [[{nb_entrees}] [{nb_couches}] [{hidden_str}] [{nb_sorties}] [{eta}]] "
+		f"{Wn_c} {Bn_c} [{score}]"
+	)
+
+
+# ==================== run_apprentissage_option3 =========================
+def run_apprentissage_option3(
+	*,
+	payload: dict,
+	r,
+	struct_reso: dict[str, object],
+	eta: float,
+	root_dir: Path | None = None,
+) -> tuple[bool, str, dict[str, object]]:
+	"""Option 3: apprentissage + erreurs + validation + ajout config si score atteint."""
+	use_root_dir = root if root_dir is None else Path(root_dir)
+	values = payload.get("values") or {}
+	if not isinstance(values, dict):
+		return False, "Payload invalide (values)", struct_reso
+
+	try:
+		n_in_selector = int(values.get("nb_entrees"))
+		k_epoques = int(values.get("k_epoques"))
+		score_ref = _parse_score_ref(values.get("score_attendu"))
+		max_iterations_raw = values.get("max_iterations", os.environ.get("APPRENTISSAGE_MAX_ITERS"))
+		max_iterations: int | None
+		if max_iterations_raw is None or str(max_iterations_raw).strip() == "":
+			max_iterations = None
+		else:
+			max_iterations = int(str(max_iterations_raw).strip())
+			if max_iterations <= 0:
+				max_iterations = None
+		nb_couches = int(values.get("nb_couches"))
+		nb_sorties_ui = int(values.get("nb_sorties"))
+		hidden_raw = values.get("nb_neurones")
+		if not isinstance(hidden_raw, list):
+			return False, "nb_neurones invalide", struct_reso
+		hidden_list = [int(v) for v in hidden_raw]
+		activation = str(payload.get("activation") or "-").strip() or "-"
+	except Exception as exc:
+		return False, f"Paramètres invalides (Apprentissage): {exc}", struct_reso
+
+	if n_in_selector not in {40, 50, 60}:
+		return False, "Aucun ficher correspondante n_in (attendu 40/50/60)", struct_reso
+	if k_epoques <= 0:
+		return False, "k_epoques doit être >= 1", struct_reso
+
+	# Imports internes (package)
+	from . import loader, service
+	from .backpp import backpp
+
+	train_path = use_root_dir / f"{n_in_selector}_data_train.txt"
+	if not train_path.exists():
+		return False, f"Fichier introuvable: {train_path}", struct_reso
+
+	# Dimensions depuis struct_reso
+	try:
+		n_in_features, nb_sorties_struct, _N_b = _extract_struct_meta(struct_reso)
+	except Exception as exc:
+		return False, f"struct_reso invalide: {exc}", struct_reso
+	if nb_sorties_ui != nb_sorties_struct:
+		return False, "nb_sorties UI incompatible avec struct_reso", struct_reso
+
+	taille = loader.count_non_empty_lines(train_path)
+	if taille <= 0:
+		return False, f"Fichier d'entraînement vide: {train_path.name}", struct_reso
+
+	# Exigence UI: i (iterations) doit refléter la taille du fichier.
+	STATE.i = int(taille)
+
+	# IMPORTANT: `erreur.txt` est écrit dans le dossier du module (lab1/erreur.txt)
+	# pour éviter la confusion avec `lab1/data/`.
+	erreur_path = Path(__file__).resolve().parent / "erreur.txt"
+	# Repart à zéro à chaque exécution
+	erreur_path.write_text("", encoding="utf-8")
+
+	iteration = 0
+
+	while True:
+		stop_early = False
+		with open(erreur_path, "a", encoding="utf-8") as f:
+			for epoch_idx in range(1, k_epoques + 1):
+				epoch_delta_sum: list[float] | None = None
+				epoch_count = 0
+				# Shuffle une fois par époque
+				D_shuffled, X_shuffled = loader.get_validation_samples_random(
+					train_path,
+					n_in=n_in_features,
+					nb_sorties=nb_sorties_struct,
+					seed=None,
+				)
+				for Dn_s, Xn in zip(D_shuffled, X_shuffled):
+					iteration += 1
+					if max_iterations is not None and iteration > max_iterations:
+						stop_early = True
+						break
+					# Met à jour X/D dans struct_reso (garde W/B actuels)
+					Wn_c_current, Bn_c_current = _extract_Wn_c_Bn_c(struct_reso)
+					struct_reso = r.set_reso(struct_reso, Xn, Wn_c_current, Bn_c_current, Dn_s)
+
+					bp = backpp(struct_reso, n_fct=STATE.n_fct, eta=float(eta))
+					# Delta de sortie attendu: (D - y) ⊙ f'(z)
+					X_vec, w_list, b_list, d_list = bp._struct_to_matrices()  # type: ignore[attr-defined]
+					y_forward, cache = bp._core.forward(X_vec, w_list, b_list, int(STATE.n_fct))
+					delta_out = bp._core.Delta(d_list, y_forward, cache.fp_list[-1])
+
+					y = bp.backprop_update(eta=float(eta), n_fct=int(STATE.n_fct))
+					struct_reso = bp.struct_reso
+
+					# Accumule les deltas de sortie pour l'époque
+					if epoch_delta_sum is None:
+						epoch_delta_sum = [0.0 for _ in delta_out]
+					for i, v in enumerate(delta_out):
+						epoch_delta_sum[i] += float(v)
+					epoch_count += 1
+
+				# Fin d'époque: écrit UNE seule ligne (moyenne des deltas) dans erreur.txt
+				if epoch_count > 0 and epoch_delta_sum is not None:
+					epoch_delta_mean = [v / float(epoch_count) for v in epoch_delta_sum]
+					f.write(f"{epoch_idx} {epoch_delta_mean}\n")
+				else:
+					# Cas rare: aucune itération traitée dans l'époque (ex: max_iterations=0)
+					f.write(f"{epoch_idx} []\n")
+
+				if stop_early:
+					break
+			if stop_early:
+				print(f"Apprentissage limité à {max_iterations} itérations (debug/test)")
+				# on sort du bloc d'époques et passe directement à la validation
+
+		# Validation finale
+		Wn_c_final, Bn_c_final = _extract_Wn_c_Bn_c(struct_reso)
+		pct = test_validation(
+			copy.deepcopy(struct_reso),
+			Wn_c_final,
+			Bn_c_final,
+			n_in_selector,
+			eta=float(eta),
+			n_fct=int(STATE.n_fct),
+			root_dir=use_root_dir,
+		)
+		# Met à jour le score obtenu (utilisé par l'interface).
+		STATE.score_ob = f"{pct:.2f}%"
+		print(f"Retour validation: {pct:.2f}%")
+
+		if pct >= score_ref:
+			formatted_line = _format_parametres_line_for_current_run(
+				activation=activation,
+				nb_entrees=n_in_selector,
+				nb_couches=nb_couches,
+				hidden_list=hidden_list,
+				nb_sorties=nb_sorties_ui,
+				eta=float(eta),
+				Wn_c=Wn_c_final,
+				Bn_c=Bn_c_final,
+				# Exigence: la colonne "score" doit refléter le score obtenu.
+				score_attendu=pct,
+			)
+			ok, msg = service.add_parametres_line(formatted_line)
+			if ok:
+				return True, f"Apprentissage terminé: score={pct:.2f}% >= ref={score_ref:.2f}% (config ajoutée)", struct_reso
+			return False, msg or "Refus d'écriture (doublon)", struct_reso
+
+		# Score trop bas: demander de continuer
+		cont = _ask_continue_apprentissage(
+			f"Score obtenu {pct:.2f}% < score attendu {score_ref:.2f}%. Continuer l'apprentissage (encore {k_epoques} époques) ?"
+		)
+		if not cont:
+			return False, f"Stop: score={pct:.2f}% < ref={score_ref:.2f}%", struct_reso
+
+
+# Racine des fichiers d'entrée (datasets). Chemin local au package.
+root = Path(__file__).resolve().parent / "data"
+
+
+# Dictionnaire: nom d'activation -> identifiant numérique (n_fct).
+ACTIVATION_TO_N_FCT: dict[str, int] = {
+	"sigmoide": 1,
+	"tan": 2,
+	"tanh": 3,
+	"gelu": 4,
+}
+
+# ==================== _normalize_activation =========================
+def _normalize_activation(value: object) -> str:
+	"""Normalise un libellé d'activation (lower + sans accents)."""
+	s = str(value or "").strip().lower()
+	# Décompose les accents puis les enlève.
+	s = unicodedata.normalize("NFKD", s)
+	s = "".join(ch for ch in s if not unicodedata.combining(ch))
+	return s
+
+# ==================== clear_console =========================
 def clear_console() -> None:
 	"""Nettoie la console.
 
@@ -218,14 +709,12 @@ class LanceurState:
 	i: int = 1
 	N: int = 1
 	j: int = 1
-	k: int = 4
+	k: int = 1
 	test_unitaire: bool = True
 
 	# UI / suivi
 	score_ob: str = "0%"
-	n_ok: int = 0
-	n_nok: int = 0
-	
+	score_ref: str = "25%"
 
 	# Config réseau (courante)
 	Wn_c: list[list[float]] = field(default_factory=list)
@@ -248,9 +737,11 @@ class LanceurState:
 		}
 
 
+# État global du lanceur (utilisé par l'UI et par les tests).
 STATE = LanceurState()
 
 
+# ==================== _init_manual_entry_defaults =========================
 def _init_manual_entry_defaults() -> None:
 	"""Initialise les valeurs d'exemple (et l'état) depuis l'environnement."""
 	ex = varEntryManuel.from_env()
@@ -264,6 +755,7 @@ def _init_manual_entry_defaults() -> None:
 _init_manual_entry_defaults()
 
 
+# ==================== execute_payload =========================
 def execute_payload(payload: dict) -> tuple[bool, str]:
 	"""Chemin d'exécution "Exécuter" (testable hors-GUI).
 
@@ -271,17 +763,8 @@ def execute_payload(payload: dict) -> tuple[bool, str]:
 	- crée/initialise `struct_reso` via `reseau.py`
 	- exécute l'option demandée (test unitaire ou mode)
 	"""
-	# Import robuste: fonctionne depuis la racine ou depuis lab1/
-	try:
-		from lab1.reseau import mon_reso
-	except Exception:
-		from reseau import mon_reso  # type: ignore
-
-	# Import robuste: backprop (affichage console)
-	try:
-		from lab1.backpp import backpp
-	except Exception:
-		from backpp import backpp  # type: ignore
+	from .reseau import mon_reso
+	from .backpp import backpp
 
 	try:
 		values = payload.get("values") or {}
@@ -390,175 +873,220 @@ def execute_payload(payload: dict) -> tuple[bool, str]:
 		mode = str(payload.get("mode") or "").strip()
 		return True, f"OK (mode={mode}, test_unitaire=True)"
 
-	# 3) Options 2-3: modes (à venir)
-	if mode in {"Test général", "Généralisation", "Apprentissage"}:
-		# Exigence d'affichage (options != 1): n'afficher que
-		# 	- Paramètres
-		# 	- Résumé
-		# 	- struct_reso
-		# (pas de Forward/Deltas/Correcteurs/Mises à jour en console).
-		#
-		# La logique complète de ces modes (lecture data_*.txt, boucles d'époques,
-		# métriques, etc.) reste à venir; on fournit toutefois l'aperçu console
-		# minimal demandé.
+	# 3) Options 2-3: modes
+	if mode == "Apprentissage":
+		ok, msg, _struct_after = run_apprentissage_option3(
+			payload=payload,
+			r=r,
+			struct_reso=struct_reso,
+			eta=eta,
+			root_dir=root,
+		)
+		return ok, msg
+
+	if mode == "Test général":
+		# Exigence: Wn_c/Bn_c doivent provenir de la config sélectionnée dans parametres.txt.
+		selected_raw_line = str(payload.get("selected_raw_line") or "").strip()
+		if not selected_raw_line:
+			return False, "Aucune configuration sélectionnée dans le tableau"
+		from . import service
+		text = service.read_parametres_text()
+		# Cherche une correspondance exacte (strip)
+		needle = selected_raw_line.strip()
+		match_line = None
+		for line in (text or "").splitlines():
+			if (line or "").strip() == needle:
+				match_line = (line or "").strip()
+				break
+		if match_line is None:
+			return False, "Aucune config correspondante (introuvable dans parametres.txt)"
 		try:
-			bp = backpp(struct_reso, n_fct=STATE.n_fct, eta=eta)
-			bp.resolution_affiche(
-				eta=eta,
-				n_fct=STATE.n_fct,
-				update_struct=True,
-				log_console="minimal",
-				precision=6,
+			_act, cfg_n_in, _cfg_n_c, _cfg_hidden, cfg_nb_sorties, _cfg_eta, Wn_c_cfg, Bn_c_cfg, _score = _parse_parametres_config_line(match_line)
+		except Exception as exc:
+			return False, f"Config invalide dans parametres.txt: {exc}"
+
+		# Cohérences minimales (évite de lancer un test avec une mauvaise config)
+		try:
+			_n_in_features, nb_sorties_struct, _N_b = _extract_struct_meta(struct_reso)
+		except Exception as exc:
+			return False, f"struct_reso invalide: {exc}"
+		if int(cfg_n_in) != int(STATE.n_in):
+			return False, "Aucune config correspondante (nb_entrees ne correspond pas)"
+		if int(cfg_nb_sorties) != int(nb_sorties_struct):
+			return False, "Aucune config correspondante (nb_sorties ne correspond pas)"
+
+		try:
+			pct, n_ok, n_nok, taille = test_general_option2(
+				struct_reso=struct_reso,
+				Wn_c=Wn_c_cfg,
+				Bn_c=Bn_c_cfg,
+				n_in=cfg_n_in,
+				eta=float(eta),
+				n_fct=int(STATE.n_fct),
+				root_dir=root,
 			)
 		except Exception as exc:
-			return False, f"Mode '{mode}' à venir (aperçu console minimal en échec): {exc}"
-		return False, f"Mode '{mode}' à venir (aperçu console minimal affiché)"
+			return False, str(exc)
+
+		STATE.score_ob = f"{pct:.2f}%"
+		return True, f"OK={n_ok} | NOK={n_nok} | taille={taille} | Score={pct:.2f}%"
+
+	if mode == "Généralisation":
+		return False, f"Mode '{mode}' à venir"
 	return False, f"Mode invalide: '{mode}'"
 
 
+# ==================== test_validation =========================
 def test_validation(
+	struct_reso: dict[str, object],
+	Wn_c: list[list[float]] | list[list[tuple[str, float]]],
+	Bn_c: list[list[float]] | list[list[tuple[str, float]]],
 	n_in: int,
-	n_c: int,
-	n_s: int,
-	N_b: list[int],
-	biais: list[float],
-	poids: list[float],
-	X: list[float] | list[int],
-	D: list[float] | list[int],
-	Wn_c: list[list[float]],
-	Bn_c: list[list[float]],
-	nb_sorties: int,
-	eta: float,
-	n_fct: int,
 	*,
-	fichier: Path | None = None,
+	eta: float = 0.1,
+	n_fct: int = 1,
 	root_dir: Path = root,
-) -> tuple[int, int, float]:
-	"""Valide un réseau sur un fichier de validation (data_vc).
+) -> float:
+	"""Valide un réseau sur un fichier `n_in_data_vc.txt`.
 
-	Spécification (résumé de l'énoncé):
-	- Initialise un nouveau `struct_reso`
-	- Garde des copies locales de `Wn_c` / `Bn_c` (ne doivent pas changer)
-	- Ouvre le fichier `f"{n_in}_data_vc.txt"` (ou `fichier` si fourni)
-	- Pour chaque ligne: parse `label: x1 x2 ...`, convertit le label via
-	  `convert_label()`, injecte X/W/B/D dans le `struct_reso`, calcule la sortie
-	  via `backpp.forward()` (sans mise à jour), compare argmax(Y) à D
-	- Affiche et retourne (n_ok, n_nok, pourcentage)
+	Comportement demandé
+	- Reçoit `struct_reso` + `Wn_c` + `Bn_c` + `n_in`.
+	- Ouvre `root_dir / f"{n_in}_data_vc.txt"`.
+	- Calcule `taille = loader.count_non_empty_lines(file)`.
+	- Pour chaque ligne (1..taille):
+		- récupère (D_list, X_list) via loader (un seul élément)
+		- met à jour `struct_reso` avec Wn_c/Bn_c, D_list, X_list
+		- exécute le forward via backpp
+		- compare Dn_s (désirée) vs Dn_snew (one-hot max)
+	- Affiche et retourne le pourcentage de réussite.
 
 	Important
-	- Cette fonction ne lit pas `STATE`: toutes les variables nécessaires
-	  doivent être passées en entrée (mêmes variables globales que dans lanceur).
+	- `Wn_c` et `Bn_c` ne doivent pas être modifiés par cette fonction.
 	"""
-	# Imports robustes: fonctionne depuis la racine ou depuis lab1/
-	try:
-		from lab1.reseau import mon_reso
-	except Exception:
-		from reseau import mon_reso  # type: ignore
+	from .reseau import mon_reso
+	from .backpp import backpp
+	from . import loader
+	from . import service
 
-	try:
-		from lab1.backpp import backpp
-	except Exception:
-		from backpp import backpp  # type: ignore
-
-	try:
-		from lab1 import service
-	except Exception:
-		import service  # type: ignore
-
-	try:
-		from lab1 import loader
-	except Exception:
-		import loader  # type: ignore
-
-	use_n_in = int(n_in)
-	use_n_c = int(n_c)
-	use_n_s = int(n_s)
-	use_N_b = list(N_b)
-	use_nb_sorties = int(nb_sorties)
+	use_n_in_selector = int(n_in)
 	use_eta = float(eta)
 	use_n_fct = int(n_fct)
 
-	if use_n_in <= 0:
+	if use_n_in_selector <= 0:
 		raise ValueError("n_in doit être >= 1")
-	if use_n_c < 0:
-		raise ValueError("n_c doit être >= 0")
-	if use_n_s <= 0:
-		raise ValueError("n_s doit être >= 1")
-	if use_nb_sorties <= 0:
-		raise ValueError("nb_sorties doit être >= 1")
-	if not use_N_b:
-		raise ValueError("N_b invalide")
-	if use_N_b[-1] != use_nb_sorties:
-		raise ValueError("nb_sorties doit correspondre à N_b[-1]")
 
-	# Copies locales immuables (principe: ne pas muter les poids/biais reçus)
+	# Ne pas muter les paramètres reçus.
 	Wn_c_fixed = copy.deepcopy(Wn_c)
 	Bn_c_fixed = copy.deepcopy(Bn_c)
+	struct_reso_local = copy.deepcopy(struct_reso)
 
-	# Choix du fichier
-	file_path = loader.resolve_validation_file(use_n_in, root_dir=root_dir, fichier=fichier)
+	# Déduit n_in (dimension réelle) et nb_sorties depuis struct_reso.
+	key_x = next((k for k in struct_reso_local.keys() if isinstance(k, str) and k.startswith("X")), None)
+	key_b = next((k for k in struct_reso_local.keys() if isinstance(k, str) and k.startswith("B")), None)
+	key_d = next((k for k in struct_reso_local.keys() if isinstance(k, str) and k.startswith("D")), None)
+	if key_x is None or key_b is None or key_d is None:
+		raise ValueError("struct_reso invalide: clés X/B/D manquantes")
+	try:
+		use_n_in_features = int(str(key_x)[1:])
+	except Exception as exc:
+		raise ValueError(f"struct_reso invalide: clé X inattendue: {key_x!r}") from exc
 
-	# 1) Init struct_reso
+	D_pairs = struct_reso_local.get(key_d)
+	if not isinstance(D_pairs, list):
+		raise ValueError("struct_reso invalide: D doit être une liste")
+	use_nb_sorties = len(D_pairs)
+	if use_nb_sorties <= 0:
+		raise ValueError("struct_reso invalide: nb_sorties <= 0")
+
+	B_layers = struct_reso_local.get(key_b)
+	if not isinstance(B_layers, list) or any(not isinstance(layer, list) for layer in B_layers):
+		raise ValueError("struct_reso invalide: B doit être une liste de listes")
+	N_b = [len(layer) for layer in B_layers]
+	if not N_b or any(n <= 0 for n in N_b):
+		raise ValueError("struct_reso invalide: dimensions B invalides")
+
+	# Fichier à ouvrir: n_in_data_vc.txt (sans fallback)
+	file_path = Path(root_dir) / f"{use_n_in_selector}_data_vc.txt"
+	if not file_path.exists():
+		raise FileNotFoundError(f"Fichier introuvable: {file_path}")
+
+	taille = loader.count_non_empty_lines(file_path)
+	if taille <= 0:
+		pct = 0.0
+		print(f"OK=0 | NOK=0 | taille=0 | Score={pct:.2f}%")
+		return pct
+
+	# Pour utiliser set_reso, on instancie un mon_reso cohérent avec struct_reso.
+	n_layers = len(N_b)
+	use_n_s = 1
+	use_n_c = max(0, n_layers - use_n_s)
 	r = mon_reso(
-		n_in=use_n_in,
+		n_in=use_n_in_features,
 		n_c=use_n_c,
 		n_s=use_n_s,
-		N_b=use_N_b,
-		biais=biais,
-		poids=poids,
-		X=X,
-		D=D,
+		N_b=N_b,
+		biais=[0.0, 0.0],
+		poids=[0.0, 0.0],
+		X=[0, 1],
+		D=[0, 1],
 		seed=None,
 	)
-	struct_reso = r.cree_reso()
-	bp = backpp(struct_reso, n_fct=use_n_fct, eta=use_eta)
+
+	bp = backpp(struct_reso_local, n_fct=use_n_fct, eta=use_eta)
 
 	n_ok = 0
 	n_nok = 0
 
-	# Lecture séquentielle via loader
-	for Dn_s_local, Xn_local in loader.iter_validation_samples_cached(
-		file_path,
-		n_in=use_n_in,
-		nb_sorties=use_nb_sorties,
-		convert_label=convert_label,
-	):
-		# Injecte X/W/B/D dans struct_reso
-		struct_reso = r.set_reso(struct_reso, Xn_local, Wn_c_fixed, Bn_c_fixed, Dn_s_local)
-		bp.struct_reso = struct_reso
+	for n_ligne in range(1, taille + 1):
+		D_list, X_list = loader.get_validation_sample_seq(
+			file_path,
+			n_ligne=n_ligne,
+			n_in=use_n_in_features,
+			nb_sorties=use_nb_sorties,
+		)
+		Dn_s_local = D_list[0]
+		Xn_local = X_list[0]
 
-		# Résolution (sans mise à jour)
+		# Met à jour struct_reso avec W/B reçus + X/D de la ligne.
+		struct_reso_local = r.set_reso(
+			struct_reso_local,
+			Xn_local,
+			Wn_c_fixed,
+			Bn_c_fixed,
+			Dn_s_local,
+		)
+		bp.struct_reso = struct_reso_local
+
+		# Résolution (forward)
 		y = bp.forward(n_fct=use_n_fct)
-		Y_max = service.fonction_max(y)
+		Dn_snew = service.fonction_max(y)
 
-		if Y_max == Dn_s_local:
+		if Dn_snew == Dn_s_local:
 			n_ok += 1
 		else:
 			n_nok += 1
 
-	# Stats
-	total = n_ok + n_nok
-	pct = 0.0 if total == 0 else (100.0 * n_ok / total)
-	print(f"Validation: OK={n_ok} | NOK={n_nok} | Score={pct:.2f}% | fichier={file_path.name}")
-
-	# Sanity: les paramètres passés ne doivent pas avoir changé
+	# Sanity: Wn_c/Bn_c ne doivent pas avoir changé.
 	if Wn_c_fixed != Wn_c or Bn_c_fixed != Bn_c:
 		raise RuntimeError("Wn_c/Bn_c ont été modifiés pendant la validation (inattendu)")
 
-	return n_ok, n_nok, pct
+	total = n_ok + n_nok
+	pct = 0.0 if total == 0 else (100.0 * n_ok / total)
+	print(f"OK={n_ok} | NOK={n_nok} | taille={taille} | Score={pct:.2f}%")
+	return pct
 
 
+# ==================== main =========================
 def main() -> None:
+	"""Démarre l'application (interface + actions).
+
+	- Charge `parametres.txt`.
+	- Instancie l'interface.
+	- Branche les callbacks (ajout/suppression/exécution).
+	"""
 	clear_console()
-	# Imports robustes: fonctionne depuis la racine ou depuis lab1/
-	try:
-		from lab1 import interface, service
-	except Exception:
-		import interface  # type: ignore
-		import service  # type: ignore
-		import tkinter.messagebox as messagebox  # type: ignore
-	else:
-		import tkinter.messagebox as messagebox
+	from . import interface, service
+	import tkinter.messagebox as messagebox
 
 	parametres_text = service.read_parametres_text()
 
@@ -601,7 +1129,33 @@ def main() -> None:
 		return ok, msg
 
 	def on_execute(payload: dict) -> tuple[bool, str]:
-		return execute_payload(payload)
+		ok, msg = execute_payload(payload)
+		# Exigence: après Apprentissage, si une config est ajoutée, rafraîchir le tableau.
+		if str(payload.get("mode") or "").strip() == "Apprentissage":
+			# 1) Met à jour le champ "Score obtenu"
+			try:
+				app._set_entry_text("score_obtenu", app._format_score_percent(STATE.score_ob))
+			except Exception:
+				pass
+			# 1b) Met à jour i (iterations) avec la taille du fichier
+			try:
+				app._set_entry_text("iterations", str(int(STATE.i)))
+			except Exception:
+				pass
+			# 2) Si une config est ajoutée, rafraîchir le tableau
+			if ok:
+				try:
+					app.load_parametres_text(service.read_parametres_text())
+					app.after(80, app._select_last_non_empty_table_row)
+				except Exception:
+					pass
+		# Exigence option 2: met à jour l'interface avec le % de réussite.
+		if str(payload.get("mode") or "").strip() == "Test général":
+			try:
+				app._set_entry_text("score_obtenu", app._format_score_percent(STATE.score_ob))
+			except Exception:
+				pass
+		return ok, msg
 
 	app = interface.HMIApp(
 		parametres_text=parametres_text,
@@ -614,4 +1168,14 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+	# Ce module utilise des imports relatifs ("from . import ...").
+	# En exécution directe (python lab1/lanceur.py), Python ne définit pas le package.
+	# On configure le contexte package pour permettre les imports relatifs.
+	if __package__ in (None, ""):
+		# Ajoute le dossier parent dans le chemin d'import pour que `lab1` soit importable.
+		# (N'affecte pas le fonctionnement en mode module: `python -m lab1.lanceur`.)
+		parent_dir = str(Path(__file__).resolve().parent.parent)
+		if parent_dir not in sys.path:
+			sys.path.insert(0, parent_dir)
+		__package__ = "lab1"
 	main()

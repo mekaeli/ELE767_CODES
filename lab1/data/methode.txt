@@ -95,18 +95,14 @@ Ce qui fait (1 + N×12) “tokens” si on compte le label comme 1 token.
 
 8) Utilisation
 --------------
-A) Lancer la conversion (depuis la racine du projet)
-	python lab1/data/file_concerter.py
+A) Lancer la conversion (recommandé)
+	python -m lab1.data.file_concerter
 
 B) Entrées par défaut
 	Les fichiers d'entrée attendus sont dans le même dossier que le script:
-		data_train.txt, data_vc.txt, data_test.txt  (dans lab1/data/)
+		data_train.txt, data_vc.txt, data_test.txt
 
 C) Dépôt des sorties
 	Pour chaque source, la sortie est écrite dans le même répertoire que la source
-	(ex: lab1/data/40_data_train.txt).
-
-D) Exemple avec un autre dossier
-	Si tu fournis explicitement un autre chemin (ex: --train autre_dossier/data_train.txt),
-	les sorties N_<nom_source> seront déposées dans ce même autre_dossier.
+	(ex: 40_data_train.txt).
 

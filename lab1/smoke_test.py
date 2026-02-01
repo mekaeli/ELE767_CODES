@@ -13,8 +13,6 @@ Objectifs
 
 Exécution
 	- `python -m lab1.smoke_test`
-	- `python lab1/smoke_test.py`
-	- `python smoke_test.py`
 """
 
 from __future__ import annotations
@@ -23,22 +21,24 @@ from pathlib import Path
 import tempfile
 
 
+# ==================== _loss_mse_half =========================
 def _loss_mse_half(y: list[float], d: list[float]) -> float:
-	"""0.5 * sum((d - y)^2)."""
+	"""Calcule la perte $0.5 * \sum (d - y)^2$.
+
+	Paramètres
+		y : sorties obtenues
+		d : sorties désirées
+	"""
 	if len(y) != len(d):
 		raise ValueError("y et d doivent avoir la même taille")
 	return 0.5 * sum((di - yi) ** 2 for di, yi in zip(d, y))
 
 
+# ==================== run_backpp =========================
 def run_backpp() -> None:
 	"""Smoke test: une itération de backprop_update() doit réduire la perte."""
-	# Import robuste (module vs script)
-	try:
-		from lab1.reseau import mon_reso  # type: ignore
-		from lab1.backpp import backpp  # type: ignore
-	except Exception:
-		from reseau import mon_reso  # type: ignore
-		from backpp import backpp  # type: ignore
+	from .reseau import mon_reso
+	from .backpp import backpp
 
 	# Réseau minimal: 2 entrées -> 1 sortie (une couche)
 	r = mon_reso(
@@ -78,22 +78,24 @@ def run_backpp() -> None:
 	print("OK: smoke_test backpp")
 
 
+# ==================== run_execute_payload =========================
 def run_execute_payload() -> None:
 	"""Smoke test: simule le clic sur 'Exécuter' sans lancer le GUI."""
-	try:
-		from lab1 import lanceur  # type: ignore
-	except Exception:
-		import lanceur  # type: ignore
+	from . import lanceur
 
 	payload = {
 		"mode": "Test unitaire",
 		"activation": "sigmoide",
-		"N_b": [2, 1],
+		# Doit correspondre au varEntryManuel courant dans lab1/lanceur.py:
+		# 2 entrées -> 2 neurones cachés -> 3 sorties
+		"N_b": [2, 3],
 		"values": {
 			"nb_entrees": 2,
 			"nb_couches": 1,
-			"nb_neurones": "2",
-			"nb_sorties": 1,
+			# NB: ce champ n'est pas utilisé par execute_payload en Test unitaire,
+			# mais on le garde cohérent.
+			"nb_neurones": [2],
+			"nb_sorties": 3,
 			"biais_min": 1,
 			"biais_max": 5,
 			"poids_min": -0.1,
@@ -120,21 +122,13 @@ def run_execute_payload() -> None:
 	print("OK: smoke_test execute_payload")
 
 
+# ==================== run =========================
 def run() -> None:
-	# Keep this runnable both as a module (python -m lab1.smoke_test)
-	# and as a plain script (python lab1/smoke_test.py or python smoke_test.py).
-	try:
-		from lab1 import layout  # type: ignore
-		from lab1 import service  # type: ignore
-	except Exception:
-		import layout  # type: ignore
-		import service  # type: ignore
-
-	# Import robuste: lanceur (pour convert_label)
-	try:
-		from lab1 import lanceur  # type: ignore
-	except Exception:
-		import lanceur  # type: ignore
+	"""Point d'entrée du smoke test (sans interface graphique)."""
+	from . import layout
+	from . import service
+	from . import lanceur
+	from . import loader
 
 	# Smoke test: règle MAX (one-hot)
 	assert service.fonction_max([0.12, -0.32, 0.52, 0.42]) == [0, 0, 1, 0]
@@ -143,20 +137,20 @@ def run() -> None:
 	assert service.fonction_max([1.0, 1.0, 0.0]) == [1, 0, 0]
 
 	# Mini-tests: convert_label() (selon l'énoncé)
-	assert lanceur.convert_label(1, 10) == [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-	assert lanceur.convert_label(2, 10) == [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
-	assert lanceur.convert_label(9, 10) == [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
-	assert lanceur.convert_label(0, 10) == [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+	assert loader.convert_label(1, 10) == [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+	assert loader.convert_label(2, 10) == [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+	assert loader.convert_label(9, 10) == [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+	assert loader.convert_label(0, 10) == [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 	# Cas générique (0-based)
-	assert lanceur.convert_label(0, 3) == [1, 0, 0]
-	assert lanceur.convert_label(2, 3) == [0, 0, 1]
+	assert loader.convert_label(0, 3) == [1, 0, 0]
+	assert loader.convert_label(2, 3) == [0, 0, 1]
 	try:
-		lanceur.convert_label(10, 10)
+		loader.convert_label(10, 10)
 		raise AssertionError("convert_label(10, 10) devait lever ValueError")
 	except ValueError:
 		pass
 
-	# Minimal end-to-end check for parametres.txt I/O.
+	# Test simple de lecture/écriture de parametres.txt (dans un dossier temporaire).
 	line = "[sigmoïde] [[2] [1] [2] [1] [0.1]] [[0.1,0.2]] [[0.0]] [60%]"
 
 	with tempfile.TemporaryDirectory() as tmp:

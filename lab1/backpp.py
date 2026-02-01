@@ -41,31 +41,36 @@ Affichage (séquences)
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 import unicodedata
 from typing import Dict, List, Sequence, Tuple
 
-# Imports robustes : permettent d'exécuter depuis la racine du workspace
-# (import lab1.*) ou directement depuis le répertoire lab1/.
-try:
-	from lab1.reseau import mon_reso  # type: ignore
-except Exception:
-	from reseau import mon_reso  # type: ignore
 
-try:
-	from lab1.fct_activation import (  # type: ignore
-		gelu_et_derivative,
-		sigmoide_et_derivative,
-		tan_et_derivative,
-		tanh_et_derivative,
-	)
-except Exception:
-	from fct_activation import (  # type: ignore
-		gelu_et_derivative,
-		sigmoide_et_derivative,
-		tan_et_derivative,
-		tanh_et_derivative,
-	)
+# ==================== _safe_console_symbol =========================
+def _safe_console_symbol(symbol: str, fallback: str) -> str:
+	"""Retourne `symbol` si stdout peut l'encoder, sinon `fallback`.
+
+	Important: sous Windows, la console peut être en CP1252 et certains
+	caractères mathématiques (ex: '⊙') font planter `print()`.
+	"""
+	enc = getattr(sys.stdout, "encoding", None) or ""
+	try:
+		symbol.encode(enc or "utf-8")
+		return symbol
+	except Exception:
+		return fallback
+
+
+HADAMARD = _safe_console_symbol("⊙", "*")  # Symbole utilisé à l'affichage (fallback ASCII si besoin).
+
+from .reseau import mon_reso
+from .fct_activation import (
+	gelu_et_derivative,
+	sigmoide_et_derivative,
+	tan_et_derivative,
+	tanh_et_derivative,
+)
 
 
 class console_utils:
@@ -1137,6 +1142,9 @@ class backpp:
 
 			self._print_step("Sortie")
 			L = len(a_list)
+			from .service import fonction_max
+			Dn_snew = fonction_max(y)
+			print(f"Dn_snew = {Dn_snew}")
 			if len(y) == 1:
 				print(f"y: a1_{L} = [{self._fmt(y[0], precision)}]")
 			else:
@@ -1147,9 +1155,9 @@ class backpp:
 			self._print_step("Deltas")
 			L = len(delta_list)
 			if show_equations:
-				print(f"delta{L} = (d - y) ⊙ fp{L}")
+				print(f"delta{L} = (d - y) {HADAMARD} fp{L}")
 			else:
-				print(f"delta{L} = (d - y) ⊙ fp{L} = {self._fmt_vec(delta_list[-1], precision)}")
+				print(f"delta{L} = (d - y) {HADAMARD} fp{L} = {self._fmt_vec(delta_list[-1], precision)}")
 			if show_equations:
 				for j in range(1, len(delta_list[-1]) + 1):
 					lhs = f"delta{j}_{L}"
@@ -1183,10 +1191,10 @@ class backpp:
 							f"  err{k}_{layer_index} = {terms_left} = {terms_vals} = {self._fmt(err_prev[k - 1], precision)}"
 						)
 				if show_equations:
-					print(f"delta{layer_index} = err{layer_index} ⊙ fp{layer_index}")
+					print(f"delta{layer_index} = err{layer_index} {HADAMARD} fp{layer_index}")
 				else:
 					print(
-						f"delta{layer_index} = err{layer_index} ⊙ fp{layer_index} = {self._fmt_vec(delta_list[layer_index - 1], precision)}"
+						f"delta{layer_index} = err{layer_index} {HADAMARD} fp{layer_index} = {self._fmt_vec(delta_list[layer_index - 1], precision)}"
 					)
 				if show_equations:
 					for k in range(1, len(delta_list[layer_index - 1]) + 1):
