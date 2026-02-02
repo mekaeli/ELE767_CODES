@@ -1,0 +1,216 @@
+LAB1 - MODULES ET API UTILISEE (RESUME)
+======================================
+
+1) Objet
+--------
+Ce document liste les modules Python du package lab1/ et décrit:
+	- le rôle de chaque module
+	- les fonctions/classes (API) effectivement utilisées par le projet
+	- pour chaque fonction: une description simple + entrées/sorties
+
+Note
+----
+On inclut aussi certaines méthodes/fonctions dont le nom commence par "_" quand
+elles sont utilisées par d'autres modules (donc API "de fait").
+
+
+2) Liste des modules
+--------------------
+	- __init__.py
+		Package lab1 (points d'entrée via -m).
+	- lanceur.py
+		Orchestrateur: reçoit un payload, construit le réseau, exécute tests/modes.
+	- interface.py
+		Interface graphique (CustomTkinter): saisie, validation, callbacks.
+	- reseau.py
+		Construction/manipulation de struct_reso (X/W/B/D) + affichage des paramètres.
+	- backpp.py
+		Coeur numérique (forward/backprop/update) + affichage console détaillé.
+	- fct_activation.py
+		Fonctions d'activation (Fi) + dérivées (Fp).
+	- loader.py
+		Lecture de datasets "label: x1 x2 ..." + one-hot + accès par ligne / shuffle.
+	- service.py
+		Services non-UI: gestion parametres.txt + validation format + fonction_max.
+	- layout.py
+		Constantes UI + helpers (thème, polices, centrage) + mapping modes.
+	- smoke_test.py
+		Tests rapides (sans GUI) pour valider l'essentiel.
+	- data/file_concerter.py  (sous-package lab1.data)
+		Conversion des fichiers audio (trames) vers un vecteur fixe N*12.
+
+
+3) API par module (utilisee dans le projet)
+-------------------------------------------
+
+A) Module: lanceur.py
+---------------------
+Rôle
+	Point d'entrée "application". Valide les paramètres, crée struct_reso,
+	exécute les modes (test unitaire / test général / apprentissage / validation).
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| execute_payload(payload) | Exécute un payload (sans GUI) et orchestre reseau/backpp. | payload: dict | (ok,msg): (bool,str) |
+	| test_general_option2(struct_reso, Wn_c, Bn_c, n_in, eta=0.1, n_fct=1, root_dir=None) | Option 2: teste toutes les lignes de n_in_data_test.txt. | struct_reso: dict; Wn_c/Bn_c: list; n_in: int; eta: float; n_fct: int | (pct,n_ok,n_nok,taille): (float,int,int,int) |
+	| test_validation(struct_reso, Wn_c, Bn_c, n_in, eta=0.1, n_fct=1, root_dir=...) | Valide sur n_in_data_vc.txt et calcule le % de réussite. | struct_reso: dict; Wn_c/Bn_c: list; n_in: int; eta: float; n_fct: int | pct: float |
+	| clear_console() | Efface la console (cls/clear). | - | None |
+	| main() | Lance l'application (UI + callbacks). | - | None |
+	| varEntryManuel (dataclass) | Exemple déterministe X/W/B/D pour test unitaire. | - | Objet (données) |
+	| LanceurState + STATE | État global partagé (params, score, W/B). | - | Objet (données) |
+
+
+B) Module: interface.py
+-----------------------
+Rôle
+	Interface graphique (CustomTkinter). Construit les widgets, valide les champs,
+	convertit l'état UI en payload et appelle les callbacks (lanceur).
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| HMIApp(parametres_text=None, startup_defaults=None, on_set_config=..., on_delete_config=..., on_execute=...) | Fenêtre principale (UI). Construit widgets + branche callbacks. | parametres_text: str|None; startup_defaults: dict|None; callbacks | Instance HMIApp |
+	| HMIApp.load_parametres_text(text) | Charge parametres.txt dans le tableau en ignorant les lignes invalides. | text: str | None |
+	| HMIApp._set_entry_text(key, text) | Met à jour un champ de l'UI (utilisé par lanceur). | key: str; text: str | None |
+	| HMIApp._format_score_percent(raw) | Normalise un score en "%" pour affichage. | raw: object | str |
+	| HMIApp._select_last_non_empty_table_row() | Sélectionne la dernière ligne non vide du tableau. | - | None |
+
+
+C) Module: reseau.py
+--------------------
+Rôle
+	Construit la structure "struct_reso" (dictionnaire) contenant X/W/B/D sous forme
+	de paires (nom, valeur). Fournit aussi l'affichage des paramètres.
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| mon_reso(n_in, n_c, n_s, N_b, biais, poids, X, D, seed=None) | Configure la structure réseau (dimensions + bornes). | n_in:int; n_c:int; n_s:int; N_b:list[int]; biais:[min,max]; poids:[min,max]; X:list; D:list; seed:int|None | Instance mon_reso |
+	| mon_reso.cree_reso() | Génère struct_reso (X/W/B/D) avec noms + valeurs. | - | struct_reso: dict |
+	| mon_reso.get_reso() | Retourne struct_reso déjà généré. | - | struct_reso: dict |
+	| mon_reso.set_reso(struct_reso, Xn, Wn_c, Bn_c, Dn_s) | Injecte X/W/B/D dans struct_reso (vérifie dimensions). | struct_reso:dict; Xn:list; Wn_c:list[list]; Bn_c:list[list]; Dn_s:list | struct_reso: dict |
+	| mon_reso.Affiche_reso(struct_reso, precision=6, n_fct=None, eta=None) | Affiche les paramètres (style labo). | struct_reso:dict; precision:int; n_fct:int|None; eta:float|None | None (print) |
+
+
+D) Module: backpp.py
+--------------------
+Rôle
+	Coeur numérique du MLP (forward, deltas, correcteurs, mise à jour), plus
+	affichage console détaillé (option 1) / minimal (autres options).
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| backpp(struct_reso, n_fct=1, eta=0.1) | Façade: lit/écrit struct_reso et appelle le coeur numérique. | struct_reso: dict; n_fct:int; eta:float | Instance backpp |
+	| backpp.forward(n_fct=None) | Propagation avant (forward) depuis struct_reso. | n_fct:int|None | y: list[float] |
+	| backpp.solve(n_fct=None) | Alias de forward(). | n_fct:int|None | y: list[float] |
+	| backpp.backprop_update(eta=None, n_fct=None) | Une itération complète + met à jour W/B dans struct_reso. | eta:float|None; n_fct:int|None | y: list[float] |
+	| backpp.resolution_affiche(...) | Exécution pédagogique: calcule + affiche (détaillé/minimal). | flags divers (eta,n_fct,log_console,show_*,...) | struct_reso: dict |
+	| backpp._struct_to_matrices() | Convertit struct_reso -> (X,w_list,b_list,d_list) (utilisé par lanceur). | - | (X,w_list,b_list,d_list) |
+	| backpp._core.forward(X,w_list,b_list,n_fct) | Forward bas niveau (avec cache) utilisé dans lanceur. | X:list; w_list:list; b_list:list; n_fct:int | (y, cache) |
+
+
+E) Module: fct_activation.py
+----------------------------
+Rôle
+	Regroupe les fonctions d'activation Fi et leurs dérivées Fp.
+	Chaque fonction retourne [Fi, Fp].
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| sigmoide_et_derivative(activation_i) | Fi=sigmoïde(i) et Fp=Fi*(1-Fi). | activation_i: float | [Fi,Fp]: list[float,float] |
+	| tan_et_derivative(activation_i) | Fi=tan(i) et Fp=1/cos(i)^2. | activation_i: float | [Fi,Fp] |
+	| tanh_et_derivative(activation_i) | Fi=tanh(i) et Fp=1-Fi^2. | activation_i: float | [Fi,Fp] |
+	| gelu_et_derivative(activation_i) | GELU (approx.) + dérivée (approx.). | activation_i: float | [Fi,Fp] |
+
+
+F) Module: loader.py
+--------------------
+Rôle
+	Lit les fichiers data_*.txt (format: "label: x1 x2 ...") et retourne:
+	- Dn_s (one-hot) via convert_label
+	- Xn (features) via parsing float
+	Inclut du cache pour accélérer les relectures.
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| convert_label(label, nb_sorties) | Encode un label en one-hot (taille nb_sorties). | label:int; nb_sorties:int | list[int] |
+	| count_non_empty_lines(file_path) | Compte les lignes non vides (avec cache). | file_path: Path | int |
+	| get_validation_sample_seq(file_path, n_ligne, n_in, nb_sorties, convert_label=...) | Retourne 1 exemple (D_list,X_list) à la ligne n_ligne (1-based). | file_path:Path; n_ligne:int; n_in:int; nb_sorties:int | (D_list,X_list): tuple[list[list[int]], list[list[float]]] |
+	| get_validation_samples_random(file_path, n_in, nb_sorties, convert_label=..., seed=None) | Charge tout puis mélange aléatoirement. | file_path:Path; n_in:int; nb_sorties:int; seed:int|None | (D,X): tuple[list[list[int]], list[list[float]]] |
+	| resolve_validation_file(n_in, root_dir, fichier=None) | Résout le fichier de validation (fallback sur data/*). | n_in:int; root_dir:Path; fichier:Path|None | Path |
+
+
+G) Module: service.py
+---------------------
+Rôle
+	Services "non-UI": gestion parametres.txt + validation du format + utilitaire argmax.
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| read_parametres_text(parametres_path=None) | Lit parametres.txt (ou "" si absent/erreur). | parametres_path: str|Path|None | str |
+	| add_parametres_line(formatted_line, parametres_path=None) | Ajoute une config si absente (écrit l'entête si fichier vide). | formatted_line:str; parametres_path:str|Path|None | (ok,msg): tuple[bool,str] |
+	| delete_parametres_line(raw_line, parametres_path=None) | Supprime une ligne exacte (sans supprimer l'entête). | raw_line:str; parametres_path:str|Path|None | (ok,msg): tuple[bool,str] |
+	| validate_parametres_line_new_format(line) | Valide strictement le nouveau format (blocs entre crochets). | line:str | None (ValueError si invalide) |
+	| fonction_max(valeurs) | Argmax -> one-hot (0/1). | valeurs: Sequence[float] | list[int] |
+
+
+H) Module: layout.py
+--------------------
+Rôle
+	Centralise les constantes UI (couleurs, tailles, paddings) et quelques helpers.
+	Utilisé par interface.py et service.py.
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| apply_theme() | Applique le thème CustomTkinter (Dark) + configuration DPI Windows. | - | None |
+	| init_fonts() | Initialise les polices (après création fenêtre). | - | None |
+	| center_window(window, width=None, height=None) | Centre une fenêtre Tk/CTk sur l'écran. | window:Tk/CTk; width:int|None; height:int|None | None |
+
+Constantes utilisées (exemples)
+	- PARAMETRES_HEADER: entête du fichier parametres.txt
+	- ACTIVATION_VALUES / ACTIVATION_MAP: choix UI -> identifiant n_fct
+	- DEFAULT_SOURCE_FILES: mapping mode -> fichier data_*.txt
+
+
+I) Module: smoke_test.py
+------------------------
+Rôle
+	Tests rapides pour valider service/loader/backpp/execute_payload sans GUI.
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| run() | Point d'entrée des smoke tests. | - | None (AssertionError si échec) |
+	| run_execute_payload() | Teste execute_payload comme si l'UI cliquait "Exécuter". | - | None |
+	| run_backpp() | Vérifie qu'une backprop_update réduit la perte (cas simple). | - | None |
+
+
+J) Module: data/file_concerter.py  (lab1.data)
+----------------------------------------------
+Rôle
+	Convertit les fichiers data_*.txt (audio trames concaténées) en vecteurs fixes.
+	Génère typiquement 40_*, 50_*, 60_* dans lab1/data/.
+
+Fonctions / classes utilisées (table)
+
+	| Symbole | Rôle | Entrées | Sorties |
+	|--------|------|---------|---------|
+	| convert_line_to_static40(values, n_keep=40, energy_kind="Es") | Sélection énergie → N trames → 12 statiques → flatten (N*12). | values:list[float]; n_keep:int; energy_kind:str | list[float] (N*12) |
+	| convert_file(in_path, out_path, n_keep=40, energy_kind="Es") | Convertit un fichier complet et écrit "label: ...". | in_path:str|Path; out_path:str|Path; n_keep:int; energy_kind:str | (nb_lignes,nb_cols): tuple[int,int] |
+	| main() | Point d'entrée CLI: parse args et génère les fichiers N_*. | - (argv) | None |
+

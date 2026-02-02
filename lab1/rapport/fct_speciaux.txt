@@ -1,5 +1,5 @@
 
-MÉTHODE (lab1/data/file_concerter.py) - README
+MÉTHODE (lab1/data/file_concerter.py) 
 ============================================
 
 1) Objet
@@ -105,4 +105,93 @@ B) Entrées par défaut
 C) Dépôt des sorties
 	Pour chaque source, la sortie est écrite dans le même répertoire que la source
 	(ex: 40_data_train.txt).
+
+
+============================================================
+ANNEXE - CONVERSION DES LABELS (ONE-HOT) ET REGLE MAX
+============================================================
+
+Ce bloc documente 2 méthodes utilitaires utilisées dans le laboratoire 1:
+	1) convert_label(label, nb_sorties)
+	2) fonction_max(valeurs)
+
+
+1) Methode: convert_label(label, nb_sorties)
+--------------------------------------------
+Rôle
+	Convertit un label (classe) en vecteur binaire (one-hot) de taille nb_sorties.
+
+Signature
+	convert_label(label: int, nb_sorties: int) -> list[int]
+
+Règles
+	A) Cas spécial (nb_sorties = 10, chiffres)
+		- ordre des classes = 1,2,3,4,5,6,7,8,9,0
+		- donc 0 est encodé sur la dernière position
+		- labels acceptés: 0..9 (sinon: erreur)
+
+	B) Cas générique (nb_sorties != 10)
+		- accepte des labels 0..nb_sorties-1 (0-based)
+		- accepte aussi 1..nb_sorties (1-based)
+		- si le label est hors plage, on replie par modulo:
+			idx = label % nb_sorties
+		  (objectif: toujours produire un vecteur de la taille demandée)
+
+Algorithme (pseudo)
+	1. Valider nb_sorties >= 1
+	2. Si nb_sorties == 10:
+		- valider 0 <= label <= 9
+		- idx = 9 si label == 0, sinon idx = label - 1
+		- vec = [0]*10 ; vec[idx] = 1 ; retourner vec
+	3. Sinon:
+		- si 0 <= label < nb_sorties: idx = label
+		- sinon si 1 <= label <= nb_sorties: idx = label - 1
+		- sinon: idx = label % nb_sorties
+		- vec = [0]*nb_sorties ; vec[idx] = 1 ; retourner vec
+
+Exemples
+	- convert_label(1, 10)  -> [1,0,0,0,0,0,0,0,0,0]
+	- convert_label(9, 10)  -> [0,0,0,0,0,0,0,0,1,0]
+	- convert_label(0, 10)  -> [0,0,0,0,0,0,0,0,0,1]
+	- convert_label(0, 3)   -> [1,0,0]
+	- convert_label(2, 3)   -> [0,0,1]
+	- convert_label(8, 5)   -> idx = 8%5 = 3 -> [0,0,0,1,0]
+
+
+2) Methode: fonction_max(valeurs)
+---------------------------------
+Rôle
+	Convertit une liste analogique (sorties du réseau) en liste binaire (0/1)
+	en appliquant la règle MAX (argmax).
+
+Signature
+	fonction_max(valeurs: Sequence[float]) -> list[int]
+
+Règle MAX
+	- l'élément de plus grande valeur devient 1
+	- tous les autres deviennent 0
+	- en cas d'égalité, le premier maximum reçoit le 1 (tie-break argmax)
+
+Algorithme (pseudo)
+	1. Si valeurs est vide: retourner []
+	2. max_index = index de la plus grande valeur (premier max si égalité)
+	3. Retourner un vecteur binaire de même taille:
+		vec[i] = 1 si i == max_index sinon 0
+
+Exemples
+	- fonction_max([0.12, -0.32, 0.52, 0.42]) -> [0,0,1,0]
+	- fonction_max([]) -> []
+	- fonction_max([1.0, 1.0, 0.0]) -> [1,0,0]
+
+
+3) References (ou dans le code)
+-------------------------------
+Definitions
+	- convert_label: voir lab1/loader.py
+	- fonction_max: voir lab1/service.py
+
+Utilisation (exemples)
+	- Tests rapides: lab1/smoke_test.py
+	- Orchestration (generalisation / affichage): lab1/lanceur.py
+	- Backprop (appel ponctuel): lab1/backpp.py
 

@@ -23,6 +23,7 @@ import ast
 import copy
 import os
 import sys
+import time
 import unicodedata
 
 # Le module est conçu pour être utilisé comme package.
@@ -71,6 +72,15 @@ def _env_bool(name: str, default: bool) -> bool:
 		return bool(default)
 	except Exception:
 		return bool(default)
+
+
+# ==================== Paramètres configurables =========================
+# Durée maximale (en secondes) pendant laquelle l'application relance automatiquement
+# le cycle apprentissage -> validation lorsque le score n'est pas atteint.
+# L'utilisateur peut modifier:
+# - soit cette variable directement
+# - soit la variable d'environnement `APPRENTISSAGE_REPRISE_SECONDES`.
+APPRENTISSAGE_REPRISE_SECONDES: float = _env_float("APPRENTISSAGE_REPRISE_SECONDES", 60.0)
 
 
 @dataclass(frozen=True)
@@ -287,7 +297,11 @@ def _parse_parametres_config_line(raw_line: str) -> tuple[str, int, int, list[in
 
 	Wn_c_f = [[float(v) for v in layer] for layer in Wn_c]
 	Bn_c_f = [[float(v) for v in layer] for layer in Bn_c]
-	return activation, nb_entrees, nb_couches, hidden_list, nb_sorties, float(eta), Wn_c_f, Bn_c_f, groups[-1].strip()
+	# Compatibilité: la ligne peut se terminer par [score] ou par [score] [k_epoques].
+	score = groups[-1].strip()
+	if len(groups) >= 6:
+		score = groups[-2].strip()
+	return activation, nb_entrees, nb_couches, hidden_list, nb_sorties, float(eta), Wn_c_f, Bn_c_f, score
 
 
 # ==================== _check_WnBn_dimensions =========================
@@ -476,6 +490,7 @@ def _format_parametres_line_for_current_run(
 	hidden_list: list[int],
 	nb_sorties: int,
 	eta: float,
+	k_epoques: int,
 	Wn_c: list[list[float]],
 	Bn_c: list[list[float]],
 	score_attendu: object,
@@ -485,7 +500,7 @@ def _format_parametres_line_for_current_run(
 	score = _format_score_percent(score_attendu)
 	return (
 		f"[{activation}] [[{nb_entrees}] [{nb_couches}] [{hidden_str}] [{nb_sorties}] [{eta}]] "
-		f"{Wn_c} {Bn_c} [{score}]"
+		f"{Wn_c} {Bn_c} [{score}] [{int(k_epoques)}]"
 	)
 
 
@@ -561,13 +576,23 @@ def run_apprentissage_option3(
 	erreur_path.write_text("", encoding="utf-8")
 
 	iteration = 0
+	# Après un premier échec (score < score_ref), on relance automatiquement
+	# apprentissage/validation pendant au plus 1 minute, puis abandon.
+	retry_deadline: float | None = None
+	retry_notified = False
 
 	while True:
 		stop_early = False
+		time_limit_hit = False
 		with open(erreur_path, "a", encoding="utf-8") as f:
 			for epoch_idx in range(1, k_epoques + 1):
 				epoch_delta_sum: list[float] | None = None
 				epoch_count = 0
+				# Limite de temps (1 minute) si reprise automatique activée.
+				if retry_deadline is not None and time.monotonic() >= retry_deadline:
+					stop_early = True
+					time_limit_hit = True
+					break
 				# Shuffle une fois par époque
 				D_shuffled, X_shuffled = loader.get_validation_samples_random(
 					train_path,
@@ -576,6 +601,11 @@ def run_apprentissage_option3(
 					seed=None,
 				)
 				for Dn_s, Xn in zip(D_shuffled, X_shuffled):
+					# Limite de temps (1 minute) si reprise automatique activée.
+					if retry_deadline is not None and time.monotonic() >= retry_deadline:
+						stop_early = True
+						time_limit_hit = True
+						break
 					iteration += 1
 					if max_iterations is not None and iteration > max_iterations:
 						stop_early = True
@@ -611,7 +641,12 @@ def run_apprentissage_option3(
 				if stop_early:
 					break
 			if stop_early:
-				print(f"Apprentissage limité à {max_iterations} itérations (debug/test)")
+				if time_limit_hit:
+					print(
+						f"Apprentissage: reprise automatique ({APPRENTISSAGE_REPRISE_SECONDES:.0f} s) — limite atteinte, passage à la validation"
+					)
+				else:
+					print(f"Apprentissage limité à {max_iterations} itérations (debug/test)")
 				# on sort du bloc d'époques et passe directement à la validation
 
 		# Validation finale
@@ -637,6 +672,7 @@ def run_apprentissage_option3(
 				hidden_list=hidden_list,
 				nb_sorties=nb_sorties_ui,
 				eta=float(eta),
+				k_epoques=int(k_epoques),
 				Wn_c=Wn_c_final,
 				Bn_c=Bn_c_final,
 				# Exigence: la colonne "score" doit refléter le score obtenu.
@@ -647,12 +683,31 @@ def run_apprentissage_option3(
 				return True, f"Apprentissage terminé: score={pct:.2f}% >= ref={score_ref:.2f}% (config ajoutée)", struct_reso
 			return False, msg or "Refus d'écriture (doublon)", struct_reso
 
-		# Score trop bas: demander de continuer
-		cont = _ask_continue_apprentissage(
-			f"Score obtenu {pct:.2f}% < score attendu {score_ref:.2f}%. Continuer l'apprentissage (encore {k_epoques} époques) ?"
-		)
-		if not cont:
-			return False, f"Stop: score={pct:.2f}% < ref={score_ref:.2f}%", struct_reso
+		# Score trop bas: reprise automatique (sans demander) pendant au plus 1 minute.
+		now = time.monotonic()
+		if retry_deadline is None:
+			retry_deadline = now + float(APPRENTISSAGE_REPRISE_SECONDES)
+			if not retry_notified:
+				retry_notified = True
+				msg = (
+					f"Score non atteint (score actuel={pct:.2f}%, score attendu={score_ref:.2f}%). "
+					f"Reprise automatique pendant {APPRENTISSAGE_REPRISE_SECONDES:.0f} s (apprentissage puis validation en boucle)."
+				)
+				print(msg)
+				try:
+					import tkinter.messagebox as messagebox
+					messagebox.showinfo("Apprentissage", msg)
+				except Exception:
+					pass
+		# Si la minute est écoulée après la validation, on abandonne.
+		if time.monotonic() >= float(retry_deadline):
+			return (
+				False,
+				f"Abandon: score={pct:.2f}% < ref={score_ref:.2f}% après {APPRENTISSAGE_REPRISE_SECONDES:.0f} s de reprise automatique",
+				struct_reso,
+			)
+		# Sinon: recommence apprentissage/validation.
+		continue
 
 
 # Racine des fichiers d'entrée (datasets). Chemin local au package.
@@ -709,7 +764,7 @@ class LanceurState:
 	i: int = 1
 	N: int = 1
 	j: int = 1
-	k: int = 1
+	k: int = 5
 	test_unitaire: bool = True
 
 	# UI / suivi

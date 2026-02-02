@@ -323,6 +323,11 @@ class HMIApp(ctk.CTk):
 		vals = self.table_tree.item(item, "values")
 		if isinstance(vals, (list, tuple)):
 			self._load_table_row_into_form(tuple(str(v) for v in vals))
+			# Recharge aussi k_epoques depuis la ligne brute (non affichée dans le tableau).
+			raw_line = getattr(self, "table_raw_lines", {}).get(item)
+			parsed = self._parse_parametres_line(raw_line or "") if raw_line else None
+			k_val = None if not parsed else (parsed.get("k_epoques") or "").strip()
+			self._set_entry_text("k_epoques", str(k_val if k_val else 5))
 
 	def _on_table_click(self, event) -> None:
 		"""Supporte le clic simple même sur la même ligne (recharge toujours)."""
@@ -339,6 +344,11 @@ class HMIApp(ctk.CTk):
 		vals = self.table_tree.item(row_id, "values")
 		if isinstance(vals, (list, tuple)):
 			self._load_table_row_into_form(tuple(str(v) for v in vals))
+			# Recharge aussi k_epoques depuis la ligne brute (non affichée dans le tableau).
+			raw_line = getattr(self, "table_raw_lines", {}).get(row_id)
+			parsed = self._parse_parametres_line(raw_line or "") if raw_line else None
+			k_val = None if not parsed else (parsed.get("k_epoques") or "").strip()
+			self._set_entry_text("k_epoques", str(k_val if k_val else 5))
 
 	def _on_table_double_click(self, event) -> None:
 		"""Double-clic: demande au lanceur de supprimer la ligne correspondante."""
@@ -424,7 +434,13 @@ class HMIApp(ctk.CTk):
 		if len(inner) < 5:
 			return None
 
+		# Nouveau: la ligne peut se terminer par un groupe supplémentaire [k_epoques].
+		# Dans ce cas, le score est l'avant-dernier groupe.
+		k_epoques: str | None = None
 		score = groups[-1].strip()
+		if len(groups) >= 6:
+			k_epoques = groups[-1].strip()
+			score = groups[-2].strip()
 		return {
 			"fonction": fonction,
 			"nb_entrees": inner[0].strip(),
@@ -433,6 +449,7 @@ class HMIApp(ctk.CTk):
 			"nb_sorties": inner[3].strip(),
 			"eta": inner[4].strip(),
 			"score": score,
+			"k_epoques": (k_epoques or "").strip(),
 		}
 
 	def load_parametres_text(self, text: str) -> None:
@@ -720,6 +737,14 @@ class HMIApp(ctk.CTk):
 			# Au démarrage: charger la dernière ligne non vide du tableau.
 			self.after(140, self._select_last_non_empty_table_row)
 
+		# Met à jour le nom de fichier affiché lorsque nb_entrees change.
+		try:
+			if hasattr(self, "entries") and "nb_entrees" in self.entries:
+				self.entries["nb_entrees"].bind("<KeyRelease>", lambda _e: self._update_mode_label())
+				self.entries["nb_entrees"].bind("<FocusOut>", lambda _e: self._update_mode_label())
+		except Exception:
+			pass
+
 	# ==================== _build_ui =========================
 	def _build_ui(self) -> None:
 		"""Construit toute l'interface (layout + widgets)."""
@@ -758,6 +783,23 @@ class HMIApp(ctk.CTk):
 			font=layout.FONT_TITLE,
 		)
 		self.mode_label.pack(pady=(0, 10))
+
+		self.mode_file_label = ctk.CTkLabel(
+			header_frame,
+			text="nom fichier : s/o",
+			text_color=layout.COLOR_TEXT_MUTED,
+			font=layout.FONT_LABEL,
+		)
+		self.mode_file_label.pack(pady=(0, 6))
+
+		# Indicateur de test en cours (doit être visible pendant l'exécution).
+		self.test_status_label = ctk.CTkLabel(
+			header_frame,
+			text="",
+			text_color="#3FB950",
+			font=layout.FONT_LABEL,
+		)
+		self.test_status_label.pack(pady=(0, 8))
 
 		# Synchronise label + état des boutons avec le mode au démarrage.
 		self._update_mode_label()
@@ -905,7 +947,7 @@ class HMIApp(ctk.CTk):
 		self._add_field(param_grid, "nb d’entrées", "1 ≤ Xn ≤ 480", 0, 1, "nb_entrees", 1, 480, "int")
 		self._add_field(param_grid, "nb couches\nCachées", "1 ≤ Cn ≤ 10", 0, 2, "nb_couches", 1, 10, "int")
 		# nb_neurones = liste des couches cachées uniquement, ex: "2" (1 couche), "2, 3" (2 couches).
-		self._add_field(param_grid, "nb neurones/\nCachées", "ex: 2, 3", 0, 3, "nb_neurones", 1, 10, "list_int")
+		self._add_field(param_grid, "nb neurones/\nCachées", "1 ≤ Nh ≤ 200 (ex: 2, 3)", 0, 3, "nb_neurones", 1, 200, "list_int")
 		self._add_field(param_grid, "nb de sorties", "1 ≤ Sn ≤ 10", 0, 4, "nb_sorties", 1, 10, "int")
 		self._add_field(param_grid, "taux\nd’apprentissage", "0.1 ≤ η ≤ 1", 0, 5, "taux_apprentissage", 0.1, 1, "float")
 
@@ -1233,6 +1275,10 @@ class HMIApp(ctk.CTk):
 	def _update_mode_label(self) -> None:
 		"""Met à jour le texte "Mode sélectionné" selon le bouton radio choisi."""
 		self.mode_label.configure(text=f"Mode sélectionné : {self.mode_var.get()}")
+		try:
+			self._update_mode_file_label()
+		except Exception:
+			pass
 		# Exigence: bouton Set config actif uniquement en mode Apprentissage.
 		try:
 			if hasattr(self, "set_config_btn"):
@@ -1244,6 +1290,68 @@ class HMIApp(ctk.CTk):
 		# Exigence option 2: verrouillage des champs en mode Test général.
 		try:
 			self._set_form_lock_for_mode(self.mode_var.get())
+		except Exception:
+			pass
+
+	def _update_mode_file_label(self) -> None:
+		"""Affiche le nom de fichier (dataset) sous le mode, si valide.
+
+		- Si le fichier attendu existe dans `lab1/data/`, affiche le nom.
+		- Sinon, affiche "nom fichier : s/o".
+		"""
+		if not hasattr(self, "mode_file_label"):
+			return
+		mode = self.mode_var.get() if hasattr(self, "mode_var") else ""
+		if mode == "Test unitaire":
+			self.mode_file_label.configure(text="nom fichier : s/o")
+			return
+
+		# Sélecteur 40/50/60 depuis le champ nb_entrees.
+		n_in: int | None = None
+		try:
+			entry = getattr(self, "entries", {}).get("nb_entrees")
+			if entry is not None:
+				raw = str(entry.get() or "").strip()
+				if raw:
+					n_in = int(float(raw.replace(",", ".")))
+		except Exception:
+			n_in = None
+
+		if n_in not in {40, 50, 60}:
+			self.mode_file_label.configure(text="nom fichier : s/o")
+			return
+
+		suffix: str | None = None
+		if mode == "Apprentissage":
+			suffix = "data_train"
+		elif mode == "Test général":
+			suffix = "data_test"
+		else:
+			suffix = None
+
+		if not suffix:
+			self.mode_file_label.configure(text="nom fichier : s/o")
+			return
+
+		file_name = f"{int(n_in)}_{suffix}.txt"
+		try:
+			file_path = LAB1_ROOT / "data" / file_name
+			exists = bool(file_path.exists())
+		except Exception:
+			exists = False
+
+		if exists:
+			self.mode_file_label.configure(text=f"nom fichier : {file_name}")
+		else:
+			self.mode_file_label.configure(text="nom fichier : s/o")
+
+	def _set_test_status(self, message: str) -> None:
+		"""Affiche/efface le statut de test en cours (label vert)."""
+		try:
+			if hasattr(self, "test_status_label"):
+				self.test_status_label.configure(text=str(message or ""))
+				# Force le rendu avant de lancer un calcul potentiellement long.
+				self.update_idletasks()
 		except Exception:
 			pass
 
@@ -1305,11 +1413,16 @@ class HMIApp(ctk.CTk):
 		activation = self.act_var.get() if hasattr(self, "act_var") else "-"
 		eta = values.get("taux_apprentissage", 0.1)
 		score = self._format_score_percent(values.get("score_attendu", "-"))
+		# Exigence: k_epoques doit être enregistré à la fin de la ligne, pour être rechargé.
+		try:
+			k_epoques = int(values.get("k_epoques", 5))
+		except Exception:
+			k_epoques = 5
 		# IMPORTANT: Wn_c et Bn_c sont déjà des listes Python (ex: [[...],[...]]),
 		# donc str(...) produit exactement le format attendu dans parametres.txt.
 		formatted_line = (
 			f"[{activation}] [[{nb_entrees}] [{nb_couches}] [{self._format_nb_list(hidden_list)}] [{nb_sorties}] [{eta}]] "
-			f"{Wn_c} {Bn_c} [{score}]"
+			f"{Wn_c} {Bn_c} [{score}] [{k_epoques}]"
 		)
 
 		# Délégation au lanceur (callback) pour: écrire (anti-doublon) + refresh tableau.
@@ -1468,11 +1581,15 @@ class HMIApp(ctk.CTk):
 		}
 
 		if callable(getattr(self, "on_execute", None)):
+			self._set_test_status("Veuillez patienter, test en cours")
 			try:
 				ok, msg = self.on_execute(payload)
 			except Exception as exc:
+				self._set_test_status("")
 				messagebox.showerror("Exécuter", f"Erreur (lanceur): {exc}")
 				return
+			finally:
+				self._set_test_status("")
 			if ok:
 				messagebox.showinfo("Exécuter", msg or "OK")
 			else:
